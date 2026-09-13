@@ -29,7 +29,7 @@ public class ReminderReceiver extends BroadcastReceiver {
             manager.createNotificationChannel(channel);
         }
 
-        Intent open = new Intent(context, MainActivity.class);
+        Intent open = new Intent(context, ModernMainActivity.class);
         PendingIntent pending = PendingIntent.getActivity(
                 context,
                 0,
