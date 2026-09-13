@@ -8,7 +8,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:name=".ModernMainActivity"
+            android:name=".NextMainActivity"
             android:exported="true"
             android:screenOrientation="unspecified">
             <intent-filter>
@@ -16,6 +16,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".ModernMainActivity" android:exported="false" />
 
         <receiver
             android:name=".ReminderReceiver"
