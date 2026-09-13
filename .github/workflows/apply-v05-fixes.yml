@@ -1,0 +1,78 @@
+name: Apply Araç Defteri v0.5 fixes
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/apply-v05-fixes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.5 fixes
+        run: python tools/apply_v05_fixes.py
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build v0.5 APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Commit fixed source
+        run: |
+          git config user.name "Araç Defteri Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java app/build.gradle
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "Apply v0.5 auto specs CV photo and PDF fixes"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Prepare APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk "Arac-Defteri-v0.5.0-fixes-dev.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arac-Defteri-v0.5.0-fixes-dev
+          path: Arac-Defteri-v0.5.0-fixes-dev.apk
+
+      - name: Publish downloadable prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="fixes-v05-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" "Arac-Defteri-v0.5.0-fixes-dev.apk#Araç Defteri v0.5 APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Araç Defteri v0.5 CV ve Katalog Düzeltmeleri" \
+            --notes "Araç varyantından otomatik teknik bilgi, çalışan 10 fotoğraflı CV seçimi ve tamamen yenilenen PDF tasarımı." \
+            --prerelease
