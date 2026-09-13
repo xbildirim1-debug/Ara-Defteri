@@ -277,7 +277,7 @@ private void renderPage(int page) {
         overlay.setPadding(dp(14), dp(10), dp(14), dp(10));
         overlay.setBackground(cardDrawable(Color.argb(175, 5, 10, 10), dp(18), Color.TRANSPARENT));
         overlay.addView(tv(v.year + "  " + v.brand + " " + v.model, Color.WHITE, 19, true));
-        overlay.addView(tv(formatInt(v.km) + " km  •  " + v.fuelType + (v.plate.isEmpty() ? "" : "  •  " + v.plate), Color.argb(220,255,255,255), 11, false));
+        overlay.addView(tv(formatInt(v.km) + " km  •  " + v.fuelType, Color.argb(220,255,255,255), 11, false));
         FrameLayout.LayoutParams op = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         op.gravity = Gravity.BOTTOM;
         op.setMargins(dp(10), 0, dp(10), dp(10));
@@ -723,95 +723,112 @@ private void renderPage(int page) {
     }
 
 private void renderCv(LinearLayout content) {
-        addHeader(content, "Araç CV", "Detaylı, markalı ve paylaşılabilir araç geçmişi");
         AppDatabase.Vehicle v = db.getVehicle();
+        TextView title = tv("Araç CV", text, 23, true);
+        content.addView(title);
+        TextView subtitle = tv(v.year + " " + v.brand + " " + v.model + " için paylaşılabilir araç geçmişi", muted, 10, false);
+        subtitle.setPadding(0,dp(2),0,dp(11));
+        content.addView(subtitle);
 
         LinearLayout summary = card();
-        summary.setPadding(dp(18),dp(18),dp(18),dp(18));
-        summary.addView(tv("DİJİTAL ARAÇ GEÇMİŞİ", accent, 10, true));
-        summary.addView(tv(v.year + "  " + v.brand + " " + v.model, text, 22, true));
-        String vehicleMeta = prefs.getString("vehicle_body", "") + "  •  " + v.fuelType;
-        summary.addView(tv(vehicleMeta.replaceFirst("^\\s*•\\s*", ""), muted, 11, false));
-        gap(summary,14);
-        detailRow(summary,"Bakım",db.countRecordsByType("Bakım")+" kayıt");
-        detailRow(summary,"Hasar",db.countRecordsByType("Hasar")+" kayıt");
-        detailRow(summary,"Ekspertiz",db.countRecordsByType("Ekspertiz")+" kayıt");
-        detailRow(summary,"Toplam",db.countAllRecords()+" kayıt");
-        String lastNo = prefs.getString("cv_last_document_no", "");
-        if (!lastNo.isEmpty()) detailRow(summary, "Son belge no", lastNo);
+        summary.setPadding(dp(14),dp(13),dp(14),dp(13));
+        summary.addView(tv(v.year + "  " + v.brand + " " + v.model, text, 18, true));
+        String meta = prefs.getString("vehicle_trim", "") + "  •  " + prefs.getString("vehicle_engine", "");
+        meta = meta.replaceFirst("^\\s*•\\s*", "").replaceFirst("\\s*•\\s*$", "");
+        if (!meta.trim().isEmpty()) summary.addView(tv(meta, muted, 10, false));
+        gap(summary,9);
+        LinearLayout mini = new LinearLayout(this);
+        mini.setOrientation(LinearLayout.HORIZONTAL);
+        mini.addView(statCard("BAKIM", String.valueOf(db.countRecordsByType("Bakım")), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
+        gapHorizontal(mini,7);
+        mini.addView(statCard("HASAR", String.valueOf(db.countRecordsByType("Hasar")), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
+        gapHorizontal(mini,7);
+        mini.addView(statCard("TOPLAM", String.valueOf(db.countAllRecords()), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
+        summary.addView(mini);
         content.addView(summary);
-        gap(content,14);
+        gap(content,13);
 
-        sectionTitle(content, "CV fotoğrafları", "Ana araç fotoğrafına ek olarak en fazla 10 fotoğraf seç");
+        sectionTitle(content, "CV fotoğrafları", "Ana araç fotoğrafına ek olarak en fazla 10 fotoğraf");
         LinearLayout photoCard = card();
-        photoCard.setPadding(dp(15),dp(14),dp(15),dp(14));
-        cvPhotoCountView = tv(cvPhotoUris.size() + " / " + VehicleCvPdf.MAX_EXTRA_PHOTOS + " fotoğraf hazır", text, 13, true);
+        photoCard.setPadding(dp(12),dp(11),dp(12),dp(11));
+        cvPhotoCountView = tv(cvPhotoUris.size() + " / " + VehicleCvPdf.MAX_EXTRA_PHOTOS + " fotoğraf seçildi", text, 12, true);
         photoCard.addView(cvPhotoCountView);
-        photoCard.addView(tv("Seçtiklerin sadece bu CV PDF'sinde kullanılır. Tek tek ekleyebilir veya çoklu seçebilirsin.", muted, 10, false));
-        gap(photoCard,10);
+        photoCard.addView(tv("Bu fotoğraflar yalnız oluşturulan PDF içinde kullanılır.", muted, 9, false));
+        gap(photoCard,8);
 
         if (!cvPhotoUris.isEmpty()) {
             android.widget.HorizontalScrollView scrollPhotos = new android.widget.HorizontalScrollView(this);
             scrollPhotos.setHorizontalScrollBarEnabled(false);
             LinearLayout thumbs = new LinearLayout(this);
             thumbs.setOrientation(LinearLayout.HORIZONTAL);
-            thumbs.setPadding(0,dp(2),0,dp(6));
             for (Uri uri : new ArrayList<>(cvPhotoUris)) thumbs.addView(cvPhotoThumb(uri));
             scrollPhotos.addView(thumbs);
-            photoCard.addView(scrollPhotos,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(94)));
+            photoCard.addView(scrollPhotos,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));
         }
 
         LinearLayout photoActions = new LinearLayout(this);
         photoActions.setOrientation(LinearLayout.HORIZONTAL);
         Button choose = secondaryButton(cvPhotoUris.isEmpty() ? "Fotoğraf seç" : "+ Fotoğraf ekle");
         choose.setOnClickListener(vw -> pickCvImages());
-        photoActions.addView(choose, new LinearLayout.LayoutParams(0,dp(44),1f));
-        gapHorizontal(photoActions,8);
-        Button clear = secondaryButton("Tümünü kaldır");
+        photoActions.addView(choose, new LinearLayout.LayoutParams(0,dp(41),1f));
+        gapHorizontal(photoActions,7);
+        Button clear = secondaryButton("Temizle");
         clear.setEnabled(!cvPhotoUris.isEmpty());
         clear.setAlpha(cvPhotoUris.isEmpty() ? 0.45f : 1f);
-        clear.setOnClickListener(vw -> {
-            cvPhotoUris.clear();
-            renderPage(2);
-        });
-        photoActions.addView(clear, new LinearLayout.LayoutParams(0,dp(44),1f));
+        clear.setOnClickListener(vw -> { cvPhotoUris.clear(); renderPage(2); });
+        photoActions.addView(clear, new LinearLayout.LayoutParams(0,dp(41),1f));
         photoCard.addView(photoActions);
         content.addView(photoCard);
-        gap(content,16);
+        gap(content,13);
 
-        sectionTitle(content, "PDF seçenekleri", "Belgede ne görüneceğini sen belirle");
+        sectionTitle(content, "PDF seçenekleri", "İsteğe bağlı bilgileri seç");
         LinearLayout options = card();
-        options.setPadding(dp(15),dp(14),dp(15),dp(14));
-        CheckBox showPlate = new CheckBox(this);
-        showPlate.setText("Plakayı PDF'de göster");
-        showPlate.setTextColor(text);
-        showPlate.setTextSize(12);
-        showPlate.setChecked(prefs.getBoolean("cv_show_plate", true));
-        options.addView(showPlate);
+        options.setPadding(dp(12),dp(10),dp(12),dp(11));
+
         CheckBox showCosts = new CheckBox(this);
-        showCosts.setText("Maliyetleri PDF'de göster");
+        showCosts.setText("Maliyetleri göster");
         showCosts.setTextColor(text);
-        showCosts.setTextSize(12);
+        showCosts.setTextSize(11);
         showCosts.setChecked(prefs.getBoolean("cv_show_costs", false));
         options.addView(showCosts);
-        EditText phone = formField(options, "Telefon (isteğe bağlı)", prefs.getString("cv_phone", ""), InputType.TYPE_CLASS_PHONE);
-        EditText note = formMultiline(options, "CV özel notu (isteğe bağlı)", prefs.getString("cv_note", ""));
-        content.addView(options);
-        gap(content,14);
 
-        content.addView(infoCard("Araç Defteri kimliği", "PDF kapağında uygulama adı ve ikonu; her sayfada ayrıca benzersiz belge numarası bulunur.", accent));
-        gap(content,14);
-        Button create = primaryButton("Detaylı PDF Araç CV oluştur");
+        CheckBox showPrice = new CheckBox(this);
+        showPrice.setText("Satış fiyatını CV'ye ekle");
+        showPrice.setTextColor(text);
+        showPrice.setTextSize(11);
+        showPrice.setChecked(prefs.getBoolean("cv_show_price", false));
+        options.addView(showPrice);
+
+        EditText salePrice = formField(options, "İstenen satış fiyatı (₺)", prefs.getString("cv_sale_price", ""), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        salePrice.setEnabled(showPrice.isChecked());
+        salePrice.setAlpha(showPrice.isChecked() ? 1f : 0.45f);
+        showPrice.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            salePrice.setEnabled(isChecked);
+            salePrice.setAlpha(isChecked ? 1f : 0.45f);
+        });
+
+        EditText phone = formField(options, "Telefon (isteğe bağlı)", prefs.getString("cv_phone", ""), InputType.TYPE_CLASS_PHONE);
+        EditText note = formMultiline(options, "Açıklama (isteğe bağlı)", prefs.getString("cv_note", ""));
+        content.addView(options);
+        gap(content,12);
+
+        Button create = primaryButton("PDF oluştur");
         create.setOnClickListener(vw -> {
+            if (showPrice.isChecked() && salePrice.getText().toString().trim().isEmpty()) {
+                toast("Satış fiyatını gir veya fiyat seçeneğini kapat");
+                return;
+            }
             prefs.edit()
-                    .putBoolean("cv_show_plate", showPlate.isChecked())
+                    .putBoolean("cv_show_plate", false)
                     .putBoolean("cv_show_costs", showCosts.isChecked())
+                    .putBoolean("cv_show_price", showPrice.isChecked())
+                    .putString("cv_sale_price", salePrice.getText().toString().trim())
                     .putString("cv_phone", phone.getText().toString().trim())
                     .putString("cv_note", note.getText().toString().trim())
                     .apply();
             createVehiclePdf();
         });
-        content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(54)));
+        content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50)));
     }
 
     private void renderSettings(LinearLayout content) {
@@ -901,7 +918,6 @@ private void openVehicleForm() {
 
         form.addView(formSection("Sana özel bilgiler", "Bunlar katalogdan gelmez"));
         EditText color = formField(form,"Renk (isteğe bağlı)",prefs.getString("vehicle_color", ""),InputType.TYPE_CLASS_TEXT);
-        EditText plate = formField(form,"Plaka (isteğe bağlı)",v.plate,InputType.TYPE_CLASS_TEXT);
         EditText km = formField(form,"Güncel kilometre",String.valueOf(v.km),InputType.TYPE_CLASS_NUMBER);
 
         final boolean[] updating = {false};
@@ -1006,7 +1022,7 @@ private void openVehicleForm() {
                     selectedBrand,
                     selectedModel,
                     selectedYear,
-                    plate.getText().toString().trim(),
+                    "",
                     safeInt(km.getText().toString(),v.km),
                     String.valueOf(fuel.getSelectedItem())
             );

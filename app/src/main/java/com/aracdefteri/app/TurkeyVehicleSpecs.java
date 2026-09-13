@@ -124,9 +124,11 @@ public final class TurkeyVehicleSpecs {
     public static List<Spec> specsFor(String brand, String model, int year) {
         ArrayList<Spec> out = new ArrayList<>();
         List<Spec> list = DATA.get(key(brand, model));
-        if (list == null) return out;
-        for (Spec s : list) if (year >= s.fromYear && year <= s.toYear) out.add(s);
-        if (out.isEmpty()) out.addAll(list);
+        if (list != null) {
+            for (Spec s : list) if (year >= s.fromYear && year <= s.toYear) out.add(s);
+        }
+        out.addAll(TurkeyVehicleSpecsExtra.specsFor(brand, model, year));
+        if (out.isEmpty() && list != null) out.addAll(list);
         return out;
     }
 

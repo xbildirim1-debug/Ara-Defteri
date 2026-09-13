@@ -50,12 +50,13 @@ public final class VehicleCvPdf {
         AppDatabase.Vehicle vehicle = db.getVehicle();
         String documentNo = nextDocumentNo(prefs);
         boolean showCosts = prefs.getBoolean("cv_show_costs", false);
-        boolean showPlate = prefs.getBoolean("cv_show_plate", true);
+        boolean showPlate = false;
         String phone = pref(prefs, "cv_phone");
         String note = pref(prefs, "cv_note");
 
         android.graphics.pdf.PdfDocument document = new android.graphics.pdf.PdfDocument();
         Writer w = new Writer(activity, document, documentNo);
+        w.headerTitle = vehicle.year + " " + vehicle.brand + " " + vehicle.model;
         try {
             drawCover(activity, w, vehicle, prefs, documentNo, showPlate);
             drawVehicleIdentity(w, vehicle, prefs, phone, note, showPlate, db, showCosts);
@@ -77,63 +78,64 @@ public final class VehicleCvPdf {
                                   SharedPreferences prefs, String documentNo, boolean showPlate) {
         w.newPage(false);
         w.paint.setColor(Writer.ACCENT_DARK);
-        w.canvas.drawRect(0, 0, Writer.PAGE_W, 205, w.paint);
+        w.canvas.drawRect(0, 0, Writer.PAGE_W, 108, w.paint);
 
-        Bitmap icon = w.appIconBitmap(52);
+        Bitmap icon = w.appIconBitmap(27);
         if (icon != null) {
-            w.canvas.drawBitmap(icon, 42, 38, w.paint);
+            w.canvas.drawBitmap(icon, 38, 26, w.paint);
             icon.recycle();
         }
-        w.text("ARAÇ DEFTERİ", 108, 65, 17, Color.WHITE, true);
-        w.text("Aracının dijital hafızası", 108, 86, 9, 0xFFD8F5EB, false);
-        w.text("DİJİTAL ARAÇ CV", 42, 136, 27, Color.WHITE, true);
-        w.text("Kullanıcı kayıtlarından oluşturulan araç geçmişi", 42, 159, 10, 0xFFD8F5EB, false);
+        w.text("ARAÇ DEFTERİ", 73, 43, 10.5f, Color.WHITE, true);
+        w.text("Aracının dijital hafızası", 73, 59, 7.5f, 0xFFD8F5EB, false);
+        w.text(v.year + " " + v.brand + " " + v.model, 38, 88, 18, Color.WHITE, true);
 
-        w.paint.setColor(0x33FFFFFF);
-        w.canvas.drawRoundRect(new RectF(42, 172, 320, 198), 13, 13, w.paint);
-        w.text("Belge No  " + documentNo, 55, 190, 8, Color.WHITE, true);
-
-        int y = 232;
+        int y = 128;
         String mainPhoto = pref(prefs, "vehicle_photo_uri");
         Bitmap photo = mainPhoto.isEmpty() ? null : loadBitmap(activity, Uri.parse(mainPhoto), 1800);
         if (photo != null) {
-            w.drawImageCover(photo, 42, y, 511, 270);
+            w.drawImageCover(photo, 38, y, 519, 250);
             photo.recycle();
-            y += 292;
+            y += 270;
         } else {
             w.paint.setColor(0xFFF0F5F3);
-            w.canvas.drawRoundRect(new RectF(42, y, 553, y + 175), 18, 18, w.paint);
-            w.text("ARAÇ FOTOĞRAFI", 68, y + 68, 10, Writer.MUTED, true);
-            w.text("Ana araç fotoğrafı eklenmemiş", 68, y + 95, 18, Writer.DARK, true);
-            w.text("Fotoğraf eklendiğinde CV kapağında burada görünür.", 68, y + 119, 9, Writer.MUTED, false);
-            y += 198;
+            w.canvas.drawRoundRect(new RectF(38, y, 557, y + 138), 14, 14, w.paint);
+            w.text("ARAÇ FOTOĞRAFI EKLENMEMİŞ", 58, y + 61, 11, Writer.DARK, true);
+            w.text("Ana araç fotoğrafı CV kapağında burada görünür.", 58, y + 83, 8, Writer.MUTED, false);
+            y += 158;
         }
 
-        w.text(v.year + " " + v.brand + " " + v.model, 42, y, 22, Writer.DARK, true);
-        y += 23;
-        String sub = joinNonEmpty("  •  ", pref(prefs, "vehicle_trim"), pref(prefs, "vehicle_engine"));
+        String sub = joinNonEmpty("  •  ", pref(prefs, "vehicle_trim"), pref(prefs, "vehicle_engine"), pref(prefs, "vehicle_power"));
         if (!sub.isEmpty()) {
-            w.text(sub, 42, y, 10, Writer.MUTED, false);
+            w.text(sub, 38, y, 9, Writer.MUTED, false);
             y += 18;
         }
+        String phone = pref(prefs, "cv_phone");
+        if (!phone.isEmpty()) {
+            w.text("İletişim: " + phone, 38, y, 9, Writer.ACCENT_DARK, true);
+            y += 20;
+        }
 
-        String plate = showPlate && !v.plate.isEmpty() ? v.plate : "Plaka gizli";
         String body = pref(prefs, "vehicle_body");
         String trans = pref(prefs, "vehicle_transmission");
-        w.coverChip(42, y + 10, 238, "GÜNCEL KM", formatInt(v.km) + " km");
-        w.coverChip(315, y + 10, 238, "YAKIT", blankFallback(v.fuelType, "Belirtilmedi"));
-        w.coverChip(42, y + 76, 238, "KASA / VİTES", joinNonEmpty(" • ", body, trans));
-        w.coverChip(315, y + 76, 238, "PLAKA", plate);
+        boolean showPrice = prefs.getBoolean("cv_show_price", false);
+        String price = pref(prefs, "cv_sale_price");
+        w.coverChip(38, y + 6, 250, "GÜNCEL KM", formatInt(v.km) + " km");
+        w.coverChip(307, y + 6, 250, "YAKIT", blankFallback(v.fuelType, "Belirtilmedi"));
+        w.coverChip(38, y + 62, 250, "KASA / VİTES", joinNonEmpty(" • ", body, trans));
+        if (showPrice && !price.isEmpty())
+            w.coverChip(307, y + 62, 250, "İSTENEN SATIŞ FİYATI", price + " ₺");
+        else
+            w.coverChip(307, y + 62, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", pref(prefs, "vehicle_engine"), pref(prefs, "vehicle_power")));
 
-        w.text("Bu belge Araç Defteri uygulaması ile oluşturulmuştur.", 42, 778, 8, Writer.MUTED, true);
-        w.text("Resmî ekspertiz, hasar sorgusu veya kilometre doğrulama belgesi değildir.", 42, 793, 7.5f, Writer.MUTED, false);
+        w.text("Bu belge Araç Defteri uygulaması ile oluşturulmuştur.", 38, 772, 7.5f, Writer.MUTED, true);
+        w.text("Bilgiler kullanıcı kayıtlarından derlenmiştir; resmî doğrulama belgesi değildir.", 38, 786, 7, Writer.MUTED, false);
     }
 
     private static void drawVehicleIdentity(Writer w, AppDatabase.Vehicle v, SharedPreferences prefs,
                                             String phone, String note, boolean showPlate,
                                             AppDatabase db, boolean showCosts) {
         w.newPage(true);
-        w.section("Araç kimliği ve teknik bilgiler", "Seçilen katalog varyantı ve kullanıcı bilgileri");
+        w.section("Araç bilgileri", "Teknik bilgiler ve kayıt özeti");
 
         w.keyValue("Araç türü", prefOr(prefs, "vehicle_type", "Otomobil"));
         w.keyValue("Marka / Model", v.brand + " / " + v.model);
@@ -148,21 +150,12 @@ public final class VehicleCvPdf {
         w.keyValue("Çekiş", pref(prefs, "vehicle_drivetrain"));
         w.keyValue("Renk", pref(prefs, "vehicle_color"));
         w.keyValue("Güncel kilometre", formatInt(v.km) + " km");
-        if (showPlate && !v.plate.isEmpty()) w.keyValue("Plaka", v.plate);
-        if (!phone.isEmpty()) w.keyValue("İletişim", phone);
 
-        if (!note.isEmpty()) {
-            w.ensure(70);
-            w.y += 7;
-            w.label("ÖZEL NOT");
-            w.paragraph(note, 9, Writer.DARK);
-        }
-
-        w.ensure(240);
-        w.y += 18;
-        w.section("Kayıt özeti", "Araç Defteri'nde kayıtlı geçmiş");
+        w.ensure(180);
+        w.y += 8;
+        w.section("Kayıt özeti", null);
         w.summaryGrid(new String[][]{
-                {"Bakım / Onarım", db.countRecordsByType("Bakım") + " kayıt"},
+                {"Bakım", db.countRecordsByType("Bakım") + " kayıt"},
                 {"Hasar", db.countRecordsByType("Hasar") + " kayıt"},
                 {"Ekspertiz", db.countRecordsByType("Ekspertiz") + " kayıt"},
                 {"Muayene", db.countRecordsByType("Muayene") + " kayıt"},
@@ -176,19 +169,21 @@ public final class VehicleCvPdf {
     private static void drawHistory(Writer w, AppDatabase db, boolean showCosts) {
         List<AppDatabase.Record> all = db.getRecords(500);
         String[] types = {"Bakım", "Hasar", "Ekspertiz", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};
-        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Ekspertiz Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
+        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Ekspertiz", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
         for (int i = 0; i < types.length; i++) {
             List<AppDatabase.Record> group = recordsOfType(all, types[i]);
             if (group.isEmpty()) continue;
-            w.newPage(true);
-            w.section(titles[i], group.size() + " kayıt");
+            w.ensure(92);
+            w.y += 8;
+            w.section(titles[i], null);
             for (AppDatabase.Record r : group) w.recordCard(r, showCosts);
         }
 
         List<AppDatabase.Expense> expenses = db.getExpenses();
         if (!expenses.isEmpty()) {
-            w.newPage(true);
-            w.section("Diğer Giderler", expenses.size() + " kayıt");
+            w.ensure(92);
+            w.y += 8;
+            w.section("Diğer Giderler", null);
             int n = 0;
             for (AppDatabase.Expense e : expenses) {
                 if (n++ >= 60) break;
@@ -230,14 +225,14 @@ public final class VehicleCvPdf {
     }
 
     private static void drawAbout(Writer w) {
-        w.newPage(true);
-        w.section("Belge hakkında", "Araç Defteri doğrulama bilgileri");
-        w.infoBox("Araç Defteri Belge No", w.documentNo);
-        w.paragraph("Bu PDF Araç Defteri uygulaması ile oluşturulmuştur. Belge numarası, aynı kurulumda üretilen belgeleri birbirinden ayırmak için kullanılır.", 10, Writer.DARK);
-        w.y += 8;
-        w.paragraph("Bilgiler araç sahibi tarafından oluşturulan kayıtlardan derlenmiştir; resmî ekspertiz, resmî hasar sorgusu veya kilometre doğrulama belgesi değildir.", 10, Writer.DARK);
-        w.y += 8;
-        w.paragraph("Şase/VIN bilgisi Araç Defteri tarafından tutulmaz ve bu belgeye eklenmez.", 10, Writer.DARK);
+        w.ensure(170);
+        w.y += 10;
+        w.section("Açıklama", null);
+        w.paragraph("Bu PDF Araç Defteri uygulaması ile kullanıcı tarafından girilen araç kayıtlarından oluşturulmuştur.", 8.5f, Writer.DARK);
+        w.y += 5;
+        w.paragraph("Belgedeki satış fiyatı varsa kullanıcı tarafından girilen istenen fiyattır; bağımsız değerleme değildir.", 8.5f, Writer.DARK);
+        w.y += 5;
+        w.paragraph("Araç geçmişi, hasar, kilometre ve diğer bilgiler resmî doğrulama niteliği taşımaz. Şase/VIN bilgisi tutulmaz.", 8.5f, Writer.DARK);
     }
 
     private static Uri writeDocument(Activity activity, android.graphics.pdf.PdfDocument document, String fileName) throws Exception {
@@ -331,12 +326,13 @@ public final class VehicleCvPdf {
     }
 
     private static final class Writer {
-        static final int PAGE_W = 595, PAGE_H = 842, LEFT = 42, RIGHT = 553, CONTENT_W = RIGHT - LEFT;
+        static final int PAGE_W = 595, PAGE_H = 842, LEFT = 38, RIGHT = 557, CONTENT_W = RIGHT - LEFT;
         static final int ACCENT = 0xFF0AA878, ACCENT_DARK = 0xFF08785C, DARK = 0xFF17211F, MUTED = 0xFF65736F, LIGHT = 0xFFF2F7F5;
 
         final Activity activity;
         final android.graphics.pdf.PdfDocument document;
         final String documentNo;
+        String headerTitle = "";
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         android.graphics.pdf.PdfDocument.Page page;
         Canvas canvas;
@@ -355,7 +351,7 @@ public final class VehicleCvPdf {
             page = document.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, pageNo).create());
             canvas = page.getCanvas();
             canvas.drawColor(Color.WHITE);
-            y = 44;
+            y = 38;
             if (header) drawHeader();
         }
 
@@ -372,16 +368,18 @@ public final class VehicleCvPdf {
         }
 
         void drawHeader() {
-            Bitmap icon = appIconBitmap(27);
+            Bitmap icon = appIconBitmap(19);
             if (icon != null) {
-                canvas.drawBitmap(icon, LEFT, 32, paint);
+                canvas.drawBitmap(icon, LEFT, 27, paint);
                 icon.recycle();
             }
-            text("ARAÇ DEFTERİ", LEFT + 38, 51, 12, ACCENT, true);
-            text("Araç CV", RIGHT - 48, 51, 8, MUTED, true);
+            text("ARAÇ DEFTERİ", LEFT + 27, 41, 8.5f, ACCENT, true);
+            String h = headerTitle == null ? "" : headerTitle;
+            if (h.length() > 34) h = h.substring(0, 33) + "…";
+            text(h, RIGHT - 190, 41, 7.5f, DARK, true);
             paint.setColor(0xFFE6ECEA);
-            canvas.drawRect(LEFT, 68, RIGHT, 69, paint);
-            y = 93;
+            canvas.drawRect(LEFT, 56, RIGHT, 57, paint);
+            y = 76;
         }
 
         Bitmap appIconBitmap(int size) {
@@ -399,21 +397,21 @@ public final class VehicleCvPdf {
         void drawFooter() {
             paint.setColor(0xFFE6ECEA);
             canvas.drawRect(LEFT, 801, RIGHT, 802, paint);
-            text("Araç Defteri • Belge No: " + documentNo, LEFT, 820, 7, MUTED, false);
-            text("Sayfa " + pageNo, RIGHT - 37, 820, 7, MUTED, false);
+            text("Araç Defteri • Belge No: " + documentNo, LEFT, 820, 6.5f, MUTED, false);
+            text("Sayfa " + pageNo, RIGHT - 34, 820, 6.5f, MUTED, false);
         }
 
         void section(String title, String subtitle) {
-            ensure(65);
-            text(title, LEFT, y, 18, ACCENT, true);
-            y += 19;
+            ensure(47);
+            text(title, LEFT, y, 14, ACCENT, true);
+            y += 15;
             if (subtitle != null && !subtitle.isEmpty()) {
-                text(subtitle, LEFT, y, 8.5f, MUTED, false);
-                y += 16;
-            } else y += 7;
+                text(subtitle, LEFT, y, 7.5f, MUTED, false);
+                y += 12;
+            } else y += 4;
             paint.setColor(0xFFE6ECEA);
             canvas.drawRect(LEFT, y, RIGHT, y + 1, paint);
-            y += 18;
+            y += 11;
         }
 
         void label(String value) {
@@ -423,32 +421,32 @@ public final class VehicleCvPdf {
 
         void keyValue(String key, String value) {
             if (value == null || value.trim().isEmpty()) return;
-            int h = Math.max(29, measuredWrappedHeight(value, 10, 310) + 12);
-            ensure(h + 3);
-            if ((y / 29) % 2 == 0) {
+            int h = Math.max(24, measuredWrappedHeight(value, 8.8f, 325) + 8);
+            ensure(h + 2);
+            if ((y / 24) % 2 == 0) {
                 paint.setColor(0xFFF8FAF9);
-                canvas.drawRoundRect(new RectF(LEFT, y - 8, RIGHT, y + h - 7), 7, 7, paint);
+                canvas.drawRoundRect(new RectF(LEFT, y - 6, RIGHT, y + h - 5), 6, 6, paint);
             }
-            text(key.toUpperCase(new Locale("tr", "TR")), LEFT + 8, y + 5, 7.5f, MUTED, true);
-            drawWrapped(value, LEFT + 168, y + 5, 10, DARK, true, 335, 13);
+            text(key.toUpperCase(new Locale("tr", "TR")), LEFT + 7, y + 4, 6.8f, MUTED, true);
+            drawWrapped(value, LEFT + 155, y + 4, 8.8f, DARK, true, 350, 11);
             y += h;
         }
 
         void summaryGrid(String[][] items) {
-            int boxW = 247, boxH = 54, gap = 17;
+            int boxW = 251, boxH = 43, gap = 17;
             for (int i = 0; i < items.length; i += 2) {
-                ensure(boxH + 12);
+                ensure(boxH + 8);
                 summaryBox(LEFT, y, boxW, boxH, items[i][0], items[i][1]);
                 if (i + 1 < items.length) summaryBox(LEFT + boxW + gap, y, boxW, boxH, items[i + 1][0], items[i + 1][1]);
-                y += boxH + 12;
+                y += boxH + 8;
             }
         }
 
         void summaryBox(int x, int yy, int w, int h, String title, String value) {
             paint.setColor(LIGHT);
             canvas.drawRoundRect(new RectF(x, yy, x + w, yy + h), 12, 12, paint);
-            text(title.toUpperCase(new Locale("tr", "TR")), x + 13, yy + 19, 7, MUTED, true);
-            text(value, x + 13, yy + 40, 13, DARK, true);
+            text(title.toUpperCase(new Locale("tr", "TR")), x + 11, yy + 15, 6.5f, MUTED, true);
+            text(value, x + 11, yy + 33, 10.5f, DARK, true);
         }
 
         void recordCard(AppDatabase.Record r, boolean showCosts) {
@@ -458,35 +456,37 @@ public final class VehicleCvPdf {
             String detail = r.detail == null ? "" : r.detail.trim();
             String next = "";
             if (!r.nextDate.isEmpty() || r.nextKm > 0) next = "Sonraki: " + joinNonEmpty(" • ", r.nextDate, r.nextKm > 0 ? formatInt(r.nextKm) + " km" : "");
-            int detailH = detail.isEmpty() ? 0 : measuredWrappedHeight(detail, 8.5f, CONTENT_W - 30) + 8;
-            int h = 66 + detailH + (next.isEmpty() ? 0 : 18);
-            ensure(h + 11);
+            int detailH = detail.isEmpty() ? 0 : measuredWrappedHeight(detail, 7.8f, CONTENT_W - 26) + 5;
+            int h = 50 + detailH + (next.isEmpty() ? 0 : 14);
+            ensure(h + 7);
             paint.setColor(0xFFF7FAF9);
-            canvas.drawRoundRect(new RectF(LEFT, y, RIGHT, y + h), 12, 12, paint);
-            text(r.title, LEFT + 15, y + 22, 11, DARK, true);
-            text(meta, LEFT + 15, y + 40, 8, MUTED, false);
-            int yy = y + 56;
-            if (!detail.isEmpty()) yy = drawWrapped(detail, LEFT + 15, yy, 8.5f, DARK, false, CONTENT_W - 30, 12) + 4;
-            if (!next.isEmpty()) text(next, LEFT + 15, yy + 10, 8, ACCENT_DARK, true);
-            y += h + 11;
+            canvas.drawRoundRect(new RectF(LEFT, y, RIGHT, y + h), 9, 9, paint);
+            text(r.title, LEFT + 13, y + 18, 9.5f, DARK, true);
+            text(meta, LEFT + 13, y + 33, 7, MUTED, false);
+            int yy = y + 46;
+            if (!detail.isEmpty()) yy = drawWrapped(detail, LEFT + 13, yy, 7.8f, DARK, false, CONTENT_W - 26, 10) + 2;
+            if (!next.isEmpty()) text(next, LEFT + 13, yy + 8, 7.2f, ACCENT_DARK, true);
+            y += h + 7;
         }
 
         void simpleCard(String title, String subtitle, String right) {
-            int h = 56;
-            ensure(h + 9);
+            int h = 45;
+            ensure(h + 6);
             paint.setColor(0xFFF7FAF9);
-            canvas.drawRoundRect(new RectF(LEFT, y, RIGHT, y + h), 10, 10, paint);
-            text(title, LEFT + 14, y + 22, 10.5f, DARK, true);
-            text(subtitle, LEFT + 14, y + 40, 8, MUTED, false);
-            if (right != null && !right.isEmpty()) text(right, RIGHT - 100, y + 22, 9, ACCENT_DARK, true);
-            y += h + 9;
+            canvas.drawRoundRect(new RectF(LEFT, y, RIGHT, y + h), 8, 8, paint);
+            text(title, LEFT + 12, y + 18, 9, DARK, true);
+            text(subtitle, LEFT + 12, y + 33, 7, MUTED, false);
+            if (right != null && !right.isEmpty()) text(right, RIGHT - 95, y + 18, 8, ACCENT_DARK, true);
+            y += h + 6;
         }
 
         void coverChip(int x, int yy, int w, String label, String value) {
             paint.setColor(0xFFF1F6F4);
-            canvas.drawRoundRect(new RectF(x, yy, x + w, yy + 54), 12, 12, paint);
-            text(label, x + 13, yy + 18, 7, MUTED, true);
-            text(value == null || value.trim().isEmpty() ? "Belirtilmedi" : value, x + 13, yy + 39, 11, DARK, true);
+            canvas.drawRoundRect(new RectF(x, yy, x + w, yy + 46), 10, 10, paint);
+            text(label, x + 11, yy + 15, 6.2f, MUTED, true);
+            String v = value == null || value.trim().isEmpty() ? "Belirtilmedi" : value;
+            if (v.length() > 31) v = v.substring(0, 30) + "…";
+            text(v, x + 11, yy + 34, 9.2f, DARK, true);
         }
 
         void infoBox(String label, String value) {
@@ -504,7 +504,7 @@ public final class VehicleCvPdf {
         }
 
         void ensure(int required) {
-            if (y + required > 785) newPage(true);
+            if (y + required > 790) newPage(true);
         }
 
         void text(String value, float x, float yy, float size, int color, boolean bold) {
