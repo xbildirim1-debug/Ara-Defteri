@@ -376,13 +376,19 @@ public class NextMainActivity extends Activity {
         if ("Yakıt".equals(r.type) && r.quantity > 0) {
             String fuel = trimDouble(r.quantity) + " " + r.unit;
             if (r.unitPrice > 0) fuel += "  •  " + formatMoney(r.unitPrice) + "/" + r.unit;
-            TextView f = tv(fuel, accent, 11, true); f.setPadding(0, dp(6), 0, 0); c.addView(f);
+            TextView f = tv(fuel, accent, 11, true);
+            f.setPadding(0, dp(6), 0, 0);
+            c.addView(f);
         }
         if (!r.nextDate.isEmpty() || r.nextKm > 0) {
             String next = "Sonraki: " + (!r.nextDate.isEmpty() ? r.nextDate : "") + (!r.nextDate.isEmpty() && r.nextKm > 0 ? " • " : "") + (r.nextKm > 0 ? formatInt(r.nextKm) + " km" : "");
-            TextView n = tv(next, warning, 10, true); n.setPadding(0, dp(7), 0, 0); c.addView(n);
+            TextView n = tv(next, warning, 10, true);
+            n.setPadding(0, dp(7), 0, 0);
+            c.addView(n);
         }
-        TextView open = tv("Detayı aç  ›", accent, 11, true); open.setPadding(0, dp(9), 0, 0); c.addView(open);
+        TextView open = tv("Detayı aç  ›", accent, 11, true);
+        open.setPadding(0, dp(9), 0, 0);
+        c.addView(open);
         c.setOnClickListener(v -> openRecordDetail(r.id));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, 0, dp(10));
@@ -424,7 +430,10 @@ public class NextMainActivity extends Activity {
         actions.addView(edit, new LinearLayout.LayoutParams(0, dp(48), 1f));
         gapHorizontal(actions, 8);
         Button attachment = secondaryButton(r.attachment.isEmpty() ? "Belge ekle" : "Belgeyi aç");
-        attachment.setOnClickListener(v -> { if (r.attachment.isEmpty()) pickRecordAttachment(r.id); else openAttachment(r.attachment); });
+        attachment.setOnClickListener(v -> {
+            if (r.attachment.isEmpty()) pickRecordAttachment(r.id);
+            else openAttachment(r.attachment);
+        });
         actions.addView(attachment, new LinearLayout.LayoutParams(0, dp(48), 1f));
         content.addView(actions);
         gap(content, 9);
@@ -448,7 +457,8 @@ public class NextMainActivity extends Activity {
         buildBottomNav();
         LinearLayout content = newContent();
         addBackHeader(content, existing == null ? "Yeni " + moduleTitle(module) : "Kaydı düzenle", moduleTitle(module), () -> {
-            if (existing == null) openModule(module); else openRecordDetail(existing.id);
+            if (existing == null) openModule(module);
+            else openRecordDetail(existing.id);
         });
 
         AppDatabase.Vehicle vehicle = db.getVehicle();
@@ -469,8 +479,13 @@ public class NextMainActivity extends Activity {
             String[] parts = {"Motor yağı", "Yağ filtresi", "Hava filtresi", "Polen filtresi", "Yakıt filtresi", "Fren balatası", "Fren diski", "Buji", "Akü", "Triger", "Lastik", "Antifriz", "Şanzıman yağı", "Diğer"};
             Set<String> selected = new HashSet<>(Arrays.asList(base.extra.split("\\|")));
             for (String p : parts) {
-                CheckBox cb = new CheckBox(this); cb.setText(p); cb.setTextColor(text); cb.setTextSize(12); cb.setChecked(selected.contains(p));
-                f.parts.add(cb); form.addView(cb);
+                CheckBox cb = new CheckBox(this);
+                cb.setText(p);
+                cb.setTextColor(text);
+                cb.setTextSize(12);
+                cb.setChecked(selected.contains(p));
+                f.parts.add(cb);
+                form.addView(cb);
             }
             f.cost = formField(form, "Tutar (isteğe bağlı)", moneyRaw(base.cost), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
             f.detail = formMultiline(form, "Açıklama / yapılan işlemler", base.detail);
@@ -507,9 +522,16 @@ public class NextMainActivity extends Activity {
             f.subtype = formSpinner(form, "Yakıt / enerji türü", new String[]{"Benzin", "Dizel", "LPG", "Elektrik", "CNG", "Diğer"}, defaultFuel);
             f.quantity = formField(form, "Kaç litre / kWh?", base.quantity > 0 ? trimDouble(base.quantity) : "", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
             f.cost = formField(form, "Toplam ödenen tutar", moneyRaw(base.cost), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-            f.fullTank = new CheckBox(this); f.fullTank.setText("Depo tamamen dolduruldu"); f.fullTank.setTextColor(text); f.fullTank.setTextSize(12); f.fullTank.setChecked("full".equals(base.status)); form.addView(f.fullTank);
+            f.fullTank = new CheckBox(this);
+            f.fullTank.setText("Depo tamamen dolduruldu");
+            f.fullTank.setTextColor(text);
+            f.fullTank.setTextSize(12);
+            f.fullTank.setChecked("full".equals(base.status));
+            form.addView(f.fullTank);
             f.detail = formMultiline(form, "İstasyon / not (isteğe bağlı)", base.detail);
-            TextView auto = tv("Birim fiyat, miktar ve toplam tutardan otomatik hesaplanır.", accent, 10, true); auto.setPadding(0, dp(4), 0, 0); form.addView(auto);
+            TextView auto = tv("Birim fiyat, miktar ve toplam tutardan otomatik hesaplanır.", accent, 10, true);
+            auto.setPadding(0, dp(4), 0, 0);
+            form.addView(auto);
         }
         content.addView(form);
         gap(content, 14);
@@ -527,7 +549,10 @@ public class NextMainActivity extends Activity {
         if (date.isEmpty()) { toast("Tarih seçmelisin"); return; }
         if (km < 0) { toast("Kilometreyi kontrol et"); return; }
 
-        r.type = module; r.title = title; r.date = date; r.km = km;
+        r.type = module;
+        r.title = title;
+        r.date = date;
+        r.km = km;
         r.cost = f.cost == null ? 0 : safeDouble(f.cost.getText().toString());
         r.detail = f.detail == null ? "" : f.detail.getText().toString().trim();
         r.subtype = f.subtype == null ? "" : String.valueOf(f.subtype.getSelectedItem());
@@ -583,71 +608,123 @@ public class NextMainActivity extends Activity {
         summary.addView(tv(formatMoney(db.getExpenseTotal()), text, 27, true));
         content.addView(summary);
         gap(content, 12);
-        Button add = compactPrimary("+ Gider ekle"); add.setOnClickListener(v -> openExpenseForm(null)); content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        Button add = compactPrimary("+ Gider ekle");
+        add.setOnClickListener(v -> openExpenseForm(null));
+        content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
         gap(content, 16);
         for (AppDatabase.Expense e : db.getExpenses()) content.addView(expenseCard(e));
     }
 
     private View expenseCard(AppDatabase.Expense e) {
-        LinearLayout c = card(); c.setPadding(dp(15), dp(14), dp(15), dp(14));
-        LinearLayout top = new LinearLayout(this); top.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout c = card();
+        c.setPadding(dp(15), dp(14), dp(15), dp(14));
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
         top.addView(tv(e.category, text, 15, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        top.addView(tv(formatMoney(e.amount), accent, 15, true)); c.addView(top);
+        top.addView(tv(formatMoney(e.amount), accent, 15, true));
+        c.addView(top);
         c.addView(tv(e.date + (e.note.isEmpty() ? "" : "  •  " + e.note), muted, 11, false));
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setPadding(0, dp(9), 0, 0);
-        TextView edit = pill("Düzenle", accent, accentSoft); edit.setOnClickListener(v -> openExpenseForm(e)); actions.addView(edit);
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setPadding(0, dp(9), 0, 0);
+        TextView edit = pill("Düzenle", accent, accentSoft);
+        edit.setOnClickListener(v -> openExpenseForm(e));
+        actions.addView(edit);
         gapHorizontal(actions, 8);
-        TextView del = pill("Sil", danger, surface2); del.setOnClickListener(v -> confirmDeleteExpense(e)); actions.addView(del); c.addView(actions);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); lp.setMargins(0,0,0,dp(9)); c.setLayoutParams(lp);
+        TextView del = pill("Sil", danger, surface2);
+        del.setOnClickListener(v -> confirmDeleteExpense(e));
+        actions.addView(del);
+        c.addView(actions);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0,0,0,dp(9));
+        c.setLayoutParams(lp);
         return c;
     }
 
     private void openExpenseForm(AppDatabase.Expense existing) {
-        currentModule = "Giderler"; currentPage = 1; buildBottomNav();
+        currentModule = "Giderler";
+        currentPage = 1;
+        buildBottomNav();
         LinearLayout content = newContent();
         addBackHeader(content, existing == null ? "Yeni gider" : "Gideri düzenle", "Harcamayı kaydet", () -> openModule("Giderler"));
-        LinearLayout form = card(); form.setPadding(dp(16),dp(16),dp(16),dp(16));
+        LinearLayout form = card();
+        form.setPadding(dp(16),dp(16),dp(16),dp(16));
         Spinner category = formSpinner(form, "Kategori", new String[]{"Otopark", "Otoyol / geçiş", "Yıkama", "Aksesuar", "Ceza", "Diğer"}, existing == null ? "" : existing.category);
         DateInput date = formDate(form, "Tarih", existing == null ? today() : existing.date, false);
         EditText amount = formField(form, "Tutar", existing == null ? "" : moneyRaw(existing.amount), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText note = formMultiline(form, "Not (isteğe bağlı)", existing == null ? "" : existing.note);
-        content.addView(form); gap(content,14);
+        content.addView(form);
+        gap(content,14);
         Button save = primaryButton(existing == null ? "Gideri kaydet" : "Değişiklikleri kaydet");
         save.setOnClickListener(v -> {
-            double a = safeDouble(amount.getText().toString()); if (a <= 0) { toast("Tutarı girmelisin"); return; }
+            double a = safeDouble(amount.getText().toString());
+            if (a <= 0) { toast("Tutarı girmelisin"); return; }
             if (existing == null) db.addExpense(String.valueOf(category.getSelectedItem()), date.getValue(), a, note.getText().toString().trim());
-            else { existing.category=String.valueOf(category.getSelectedItem()); existing.date=date.getValue(); existing.amount=a; existing.note=note.getText().toString().trim(); db.updateExpense(existing); }
-            toast("Gider kaydedildi"); openModule("Giderler");
+            else {
+                existing.category = String.valueOf(category.getSelectedItem());
+                existing.date = date.getValue();
+                existing.amount = a;
+                existing.note = note.getText().toString().trim();
+                db.updateExpense(existing);
+            }
+            toast("Gider kaydedildi");
+            openModule("Giderler");
         });
         content.addView(save, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
     }
 
     private void confirmDeleteExpense(AppDatabase.Expense e) {
-        new AlertDialog.Builder(this).setTitle("Gideri sil?").setMessage("Bu gider kaydı kalıcı olarak silinecek.")
-                .setNegativeButton("Vazgeç", null).setPositiveButton("Sil", (d,w) -> { db.deleteExpense(e.id); openModule("Giderler"); }).show();
+        new AlertDialog.Builder(this)
+                .setTitle("Gideri sil?")
+                .setMessage("Bu gider kaydı kalıcı olarak silinecek.")
+                .setNegativeButton("Vazgeç", null)
+                .setPositiveButton("Sil", (d,w) -> {
+                    db.deleteExpense(e.id);
+                    openModule("Giderler");
+                }).show();
     }
 
     private void renderGallery(LinearLayout content) {
         addHeader(content, "Galeri", "Aracının fotoğraf hikâyesi");
-        Button add = compactPrimary("+ Fotoğraf ekle"); add.setOnClickListener(v -> pickGalleryImage()); content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        Button add = compactPrimary("+ Fotoğraf ekle");
+        add.setOnClickListener(v -> pickGalleryImage());
+        content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
         gap(content, 14);
         List<AppDatabase.Photo> photos = db.getPhotos();
-        if (photos.isEmpty()) { content.addView(infoCard("Galeri boş", "Araç fotoğraflarını burada saklayabilirsin. Hasar belgeleri kendi kayıtlarında kalır.", accent)); return; }
+        if (photos.isEmpty()) {
+            content.addView(infoCard("Galeri boş", "Araç fotoğraflarını burada saklayabilirsin. Hasar belgeleri kendi kayıtlarında kalır.", accent));
+            return;
+        }
         for (AppDatabase.Photo p : photos) {
-            LinearLayout c = card(); c.setPadding(dp(7),dp(7),dp(7),dp(10));
-            ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); try { image.setImageURI(Uri.parse(p.uri)); } catch(Exception ignored) {}
+            LinearLayout c = card();
+            c.setPadding(dp(7),dp(7),dp(7),dp(10));
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try { image.setImageURI(Uri.parse(p.uri)); } catch(Exception ignored) {}
             c.addView(image, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(230)));
-            LinearLayout footer = new LinearLayout(this); footer.setOrientation(LinearLayout.HORIZONTAL); footer.setGravity(Gravity.CENTER_VERTICAL); footer.setPadding(dp(9),dp(8),dp(9),0);
+            LinearLayout footer = new LinearLayout(this);
+            footer.setOrientation(LinearLayout.HORIZONTAL);
+            footer.setGravity(Gravity.CENTER_VERTICAL);
+            footer.setPadding(dp(9),dp(8),dp(9),0);
             footer.addView(tv(p.date, muted, 10, false), new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-            TextView del = pill("Sil", danger, surface2); del.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Fotoğraf silinsin mi?").setNegativeButton("Vazgeç",null).setPositiveButton("Sil",(d,w)->{db.deletePhoto(p.id);renderPage(2);}).show()); footer.addView(del); c.addView(footer);
-            content.addView(c); gap(content,10);
+            TextView del = pill("Sil", danger, surface2);
+            del.setOnClickListener(v -> new AlertDialog.Builder(this)
+                    .setTitle("Fotoğraf silinsin mi?")
+                    .setNegativeButton("Vazgeç",null)
+                    .setPositiveButton("Sil",(d,w)->{ db.deletePhoto(p.id); renderPage(2); })
+                    .show());
+            footer.addView(del);
+            c.addView(footer);
+            content.addView(c);
+            gap(content,10);
         }
     }
 
     private void renderCv(LinearLayout content) {
         addHeader(content, "Araç CV", "Aracının geçmişini düzenli bir PDF'e dönüştür");
         AppDatabase.Vehicle v = db.getVehicle();
-        LinearLayout card = card(); card.setPadding(dp(18),dp(18),dp(18),dp(18));
+        LinearLayout card = card();
+        card.setPadding(dp(18),dp(18),dp(18),dp(18));
         card.addView(tv("DİJİTAL ARAÇ GEÇMİŞİ", accent, 10, true));
         card.addView(tv(v.year + "  " + v.brand + " " + v.model, text, 22, true));
         card.addView(tv(formatInt(v.km) + " km  •  " + v.fuelType, muted, 11, false));
@@ -656,29 +733,43 @@ public class NextMainActivity extends Activity {
         detailRow(card,"Hasar",db.countRecordsByType("Hasar")+" kayıt");
         detailRow(card,"Ekspertiz",db.countRecordsByType("Ekspertiz")+" kayıt");
         detailRow(card,"Toplam",db.countAllRecords()+" kayıt");
-        content.addView(card); gap(content,14);
+        content.addView(card);
+        gap(content,14);
         content.addView(infoCard("Gizlilik odaklı", "Şase/VIN tutulmaz. Poliçe numarası CV'ye varsayılan olarak eklenmez. Telefon yalnız sen istersen yer alır.", accent));
         gap(content,14);
-        Button create = primaryButton("PDF Araç CV oluştur"); create.setOnClickListener(vw -> createVehiclePdf()); content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(54)));
+        Button create = primaryButton("PDF Araç CV oluştur");
+        create.setOnClickListener(vw -> createVehiclePdf());
+        content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(54)));
     }
 
     private void renderSettings(LinearLayout content) {
         addHeader(content, "Ayarlar", "Sade, küçük ve işe yarayan ayarlar");
         sectionTitle(content, "Görünüm", "Tema seçimi");
-        LinearLayout theme = card(); theme.setPadding(dp(10),dp(10),dp(10),dp(10));
-        LinearLayout segmented = new LinearLayout(this); segmented.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout theme = card();
+        theme.setPadding(dp(10),dp(10),dp(10),dp(10));
+        LinearLayout segmented = new LinearLayout(this);
+        segmented.setOrientation(LinearLayout.HORIZONTAL);
         String selected = prefs.getString("theme_mode","system");
-        addThemeSegment(segmented,"Sistem","system",selected); addThemeSegment(segmented,"Açık","light",selected); addThemeSegment(segmented,"Koyu","dark",selected);
-        theme.addView(segmented, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44))); content.addView(theme);
+        addThemeSegment(segmented,"Sistem","system",selected);
+        addThemeSegment(segmented,"Açık","light",selected);
+        addThemeSegment(segmented,"Koyu","dark",selected);
+        theme.addView(segmented, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)));
+        content.addView(theme);
         gap(content,18);
 
         sectionTitle(content, "Bildirimler", "Hatırlatmaların çalıştığını kontrol et");
-        LinearLayout notifications = card(); notifications.setPadding(dp(15),dp(14),dp(15),dp(14));
+        LinearLayout notifications = card();
+        notifications.setPadding(dp(15),dp(14),dp(15),dp(14));
         boolean enabled = notificationsEnabled();
         notifications.addView(tv(enabled ? "Bildirimler açık" : "Bildirim izni kapalı", enabled ? success : danger, 14, true));
         notifications.addView(tv("Bakım, muayene, vergi ve sigorta tarihleri için 7 gün ve 1 gün kala hatırlatır.", muted, 10, false));
         gap(notifications,10);
-        Button test = secondaryButton("Test bildirimi gönder"); test.setOnClickListener(v -> { if (!notificationsEnabled()) requestNotificationPermissionIfNeeded(); else ReminderScheduler.test(this); }); notifications.addView(test,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44)));
+        Button test = secondaryButton("Test bildirimi gönder");
+        test.setOnClickListener(v -> {
+            if (!notificationsEnabled()) requestNotificationPermissionIfNeeded();
+            else ReminderScheduler.test(this);
+        });
+        notifications.addView(test,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(44)));
         content.addView(notifications);
         gap(content,18);
 
@@ -691,27 +782,49 @@ public class NextMainActivity extends Activity {
         TextView t = tv(label, active ? (dark ? Color.WHITE : text) : muted, 11, active);
         t.setGravity(Gravity.CENTER);
         t.setBackground(cardDrawable(active ? accentSoft : Color.TRANSPARENT, dp(13), Color.TRANSPARENT));
-        t.setOnClickListener(v -> { prefs.edit().putString("theme_mode", value).apply(); recreate(); });
+        t.setOnClickListener(v -> {
+            prefs.edit().putString("theme_mode", value).apply();
+            recreate();
+        });
         parent.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
     }
 
     private void openVehicleForm() {
-        currentPage = 0; currentModule = "Araç"; selectedRecordId = -1; buildBottomNav();
-        LinearLayout content = newContent(); addBackHeader(content,"Araç bilgileri","Profilini güncelle",()->renderPage(0));
+        currentPage = 0;
+        currentModule = "Araç";
+        selectedRecordId = -1;
+        buildBottomNav();
+        LinearLayout content = newContent();
+        addBackHeader(content,"Araç bilgileri","Profilini güncelle",()->renderPage(0));
         AppDatabase.Vehicle v = db.getVehicle();
-        LinearLayout form = card(); form.setPadding(dp(16),dp(16),dp(16),dp(16));
+        LinearLayout form = card();
+        form.setPadding(dp(16),dp(16),dp(16),dp(16));
         EditText brand = formField(form,"Marka",v.brand,InputType.TYPE_CLASS_TEXT);
         EditText model = formField(form,"Model",v.model,InputType.TYPE_CLASS_TEXT);
         EditText year = formField(form,"Model yılı",String.valueOf(v.year),InputType.TYPE_CLASS_NUMBER);
         Spinner fuel = formSpinner(form,"Yakıt / güç tipi",new String[]{"Benzin","Dizel","LPG","Elektrik","Hibrit / Benzin","Hibrit / Dizel","Plug-in hibrit","Diğer"},v.fuelType);
         EditText plate = formField(form,"Plaka (isteğe bağlı)",v.plate,InputType.TYPE_CLASS_TEXT);
         EditText km = formField(form,"Güncel kilometre",String.valueOf(v.km),InputType.TYPE_CLASS_NUMBER);
-        content.addView(form); gap(content,14);
-        Button save = primaryButton("Araç bilgilerini kaydet"); save.setOnClickListener(x->{
-            if(brand.getText().toString().trim().isEmpty()||model.getText().toString().trim().isEmpty()){toast("Marka ve model gerekli");return;}
-            db.updateVehicle(brand.getText().toString().trim(),model.getText().toString().trim(),safeInt(year.getText().toString(),v.year),plate.getText().toString().trim(),safeInt(km.getText().toString(),v.km),String.valueOf(fuel.getSelectedItem()));
-            toast("Araç bilgileri güncellendi");renderPage(0);
-        }); content.addView(save,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(54)));
+        content.addView(form);
+        gap(content,14);
+        Button save = primaryButton("Araç bilgilerini kaydet");
+        save.setOnClickListener(x -> {
+            if(brand.getText().toString().trim().isEmpty() || model.getText().toString().trim().isEmpty()) {
+                toast("Marka ve model gerekli");
+                return;
+            }
+            db.updateVehicle(
+                    brand.getText().toString().trim(),
+                    model.getText().toString().trim(),
+                    safeInt(year.getText().toString(),v.year),
+                    plate.getText().toString().trim(),
+                    safeInt(km.getText().toString(),v.km),
+                    String.valueOf(fuel.getSelectedItem())
+            );
+            toast("Araç bilgileri güncellendi");
+            renderPage(0);
+        });
+        content.addView(save,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(54)));
     }
 
     private static class DateInput {
@@ -722,115 +835,595 @@ public class NextMainActivity extends Activity {
     private DateInput formDate(LinearLayout parent, String label, String value, boolean optional) {
         parent.addView(formLabel(label));
         DateInput input = new DateInput();
-        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.HORIZONTAL); box.setGravity(Gravity.CENTER_VERTICAL); box.setPadding(dp(13),0,dp(10),0); box.setBackground(inputDrawable());
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(13),0,dp(10),0);
+        box.setBackground(inputDrawable());
         input.value = tv(value == null ? "" : value, (value == null || value.isEmpty()) ? muted : text, 13, false);
         input.value.setHint(optional ? "Tarih seç (isteğe bağlı)" : "Tarih seç");
         box.addView(input.value,new LinearLayout.LayoutParams(0,dp(50),1f));
-        TextView icon = tv("▣",accent,15,true); icon.setGravity(Gravity.CENTER); box.addView(icon,new LinearLayout.LayoutParams(dp(34),dp(50)));
+        TextView icon = tv("▣",accent,15,true);
+        icon.setGravity(Gravity.CENTER);
+        box.addView(icon,new LinearLayout.LayoutParams(dp(34),dp(50)));
         box.setOnClickListener(v -> showDatePicker(input.value));
-        if(optional){ icon.setOnLongClickListener(v->{input.value.setText("");input.value.setTextColor(muted);return true;}); }
+        if(optional) {
+            icon.setOnLongClickListener(v -> {
+                input.value.setText("");
+                input.value.setTextColor(muted);
+                return true;
+            });
+        }
         parent.addView(box,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50)));
-        gap(parent,10); return input;
+        gap(parent,10);
+        return input;
     }
 
     private void showDatePicker(TextView target) {
         Calendar c = Calendar.getInstance();
-        try { Date d = new SimpleDateFormat("dd.MM.yyyy",Locale.getDefault()).parse(target.getText().toString()); if(d!=null)c.setTime(d); } catch(Exception ignored){}
-        DatePickerDialog dialog = new DatePickerDialog(this, dark ? AlertDialog.THEME_DEVICE_DEFAULT_DARK : AlertDialog.THEME_DEVICE_DEFAULT_LIGHT,
-                (view, year, month, day) -> { target.setText(String.format(Locale.getDefault(),"%02d.%02d.%04d",day,month+1,year)); target.setTextColor(text); },
-                c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH));
+        try {
+            Date d = new SimpleDateFormat("dd.MM.yyyy",Locale.getDefault()).parse(target.getText().toString());
+            if(d != null) c.setTime(d);
+        } catch(Exception ignored) {}
+        DatePickerDialog dialog = new DatePickerDialog(
+                this,
+                dark ? AlertDialog.THEME_DEVICE_DEFAULT_DARK : AlertDialog.THEME_DEVICE_DEFAULT_LIGHT,
+                (view, year, month, day) -> {
+                    target.setText(String.format(Locale.getDefault(),"%02d.%02d.%04d",day,month+1,year));
+                    target.setTextColor(text);
+                },
+                c.get(Calendar.YEAR),
+                c.get(Calendar.MONTH),
+                c.get(Calendar.DAY_OF_MONTH)
+        );
         dialog.show();
     }
 
-    private EditText formField(LinearLayout parent,String label,String value,int inputType){
-        parent.addView(formLabel(label)); EditText e=new EditText(this); e.setText(value); e.setTextColor(text); e.setHintTextColor(muted); e.setTextSize(13); e.setSingleLine(true); e.setInputType(inputType); e.setPadding(dp(13),0,dp(13),0); e.setBackground(inputDrawable()); parent.addView(e,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50))); gap(parent,10); return e;
+    private EditText formField(LinearLayout parent,String label,String value,int inputType) {
+        parent.addView(formLabel(label));
+        EditText e = new EditText(this);
+        e.setText(value);
+        e.setTextColor(text);
+        e.setHintTextColor(muted);
+        e.setTextSize(13);
+        e.setSingleLine(true);
+        e.setInputType(inputType);
+        e.setPadding(dp(13),0,dp(13),0);
+        e.setBackground(inputDrawable());
+        parent.addView(e,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50)));
+        gap(parent,10);
+        return e;
     }
 
-    private EditText formMultiline(LinearLayout parent,String label,String value){
-        parent.addView(formLabel(label)); EditText e=new EditText(this); e.setText(value); e.setTextColor(text); e.setHintTextColor(muted); e.setTextSize(13); e.setGravity(Gravity.TOP); e.setMinLines(3); e.setPadding(dp(13),dp(12),dp(13),dp(12)); e.setBackground(inputDrawable()); parent.addView(e,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(92))); gap(parent,10); return e;
+    private EditText formMultiline(LinearLayout parent,String label,String value) {
+        parent.addView(formLabel(label));
+        EditText e = new EditText(this);
+        e.setText(value);
+        e.setTextColor(text);
+        e.setHintTextColor(muted);
+        e.setTextSize(13);
+        e.setGravity(Gravity.TOP);
+        e.setMinLines(3);
+        e.setPadding(dp(13),dp(12),dp(13),dp(12));
+        e.setBackground(inputDrawable());
+        parent.addView(e,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(92)));
+        gap(parent,10);
+        return e;
     }
 
-    private Spinner formSpinner(LinearLayout parent,String label,String[] values,String selected){
-        parent.addView(formLabel(label)); Spinner s=new Spinner(this); s.setBackground(inputDrawable()); ArrayAdapter<String> adapter=new ArrayAdapter<String>(this,android.R.layout.simple_spinner_item,values){
-            @Override public View getView(int position,View convertView,ViewGroup parent){TextView t=(TextView)super.getView(position,convertView,parent);t.setTextColor(text);t.setTextSize(13);t.setPadding(dp(13),0,dp(13),0);return t;}
-            @Override public View getDropDownView(int position,View convertView,ViewGroup parent){TextView t=(TextView)super.getDropDownView(position,convertView,parent);t.setTextColor(Color.rgb(25,30,30));t.setTextSize(14);t.setPadding(dp(16),dp(12),dp(16),dp(12));return t;}
-        }; adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); s.setAdapter(adapter); if(selected!=null&&!selected.isEmpty()){for(int i=0;i<values.length;i++)if(values[i].equals(selected)){s.setSelection(i);break;}} parent.addView(s,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50))); gap(parent,10); return s;
+    private Spinner formSpinner(LinearLayout parent,String label,String[] values,String selected) {
+        parent.addView(formLabel(label));
+        Spinner s = new Spinner(this);
+        s.setBackground(inputDrawable());
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,android.R.layout.simple_spinner_item,values) {
+            @Override
+            public View getView(int position,View convertView,ViewGroup parent) {
+                TextView t = (TextView)super.getView(position,convertView,parent);
+                t.setTextColor(text);
+                t.setTextSize(13);
+                t.setPadding(dp(13),0,dp(13),0);
+                return t;
+            }
+            @Override
+            public View getDropDownView(int position,View convertView,ViewGroup parent) {
+                TextView t = (TextView)super.getDropDownView(position,convertView,parent);
+                t.setTextColor(Color.rgb(25,30,30));
+                t.setTextSize(14);
+                t.setPadding(dp(16),dp(12),dp(16),dp(12));
+                return t;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        s.setAdapter(adapter);
+        if(selected != null && !selected.isEmpty()) {
+            for(int i=0;i<values.length;i++) {
+                if(values[i].equals(selected)) {
+                    s.setSelection(i);
+                    break;
+                }
+            }
+        }
+        parent.addView(s,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50)));
+        gap(parent,10);
+        return s;
     }
 
-    private TextView formLabel(String value){TextView t=tv(value,muted,10,true);t.setPadding(dp(2),0,0,dp(5));return t;}
-    private TextView formSection(String title,String subtitle){TextView t=tv(title+"\n"+subtitle,text,14,true);t.setLineSpacing(dp(3),1f);t.setPadding(0,0,0,dp(12));return t;}
-
-    private void detailRow(LinearLayout parent,String label,String value){
-        gap(parent,12); TextView l=tv(label.toUpperCase(Locale.getDefault()),muted,9,true); parent.addView(l); TextView v=tv(value,text,12,false); v.setPadding(0,dp(3),0,0); parent.addView(v);
+    private TextView formLabel(String value) {
+        TextView t = tv(value,muted,10,true);
+        t.setPadding(dp(2),0,0,dp(5));
+        return t;
     }
 
-    private void addHeader(LinearLayout content,String title,String subtitle){
-        content.addView(tv(title,text,27,true)); TextView sub=tv(subtitle,muted,11,false);sub.setPadding(0,dp(3),0,0);content.addView(sub);gap(content,17);
+    private TextView formSection(String title,String subtitle) {
+        TextView t = tv(title + "\n" + subtitle,text,14,true);
+        t.setLineSpacing(dp(3),1f);
+        t.setPadding(0,0,0,dp(12));
+        return t;
     }
 
-    private void addBackHeader(LinearLayout content,String title,String subtitle,Runnable backAction){
-        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView back=tv("‹",text,34,false);back.setGravity(Gravity.CENTER);back.setOnClickListener(v->backAction.run());row.addView(back,new LinearLayout.LayoutParams(dp(44),dp(48)));
-        LinearLayout titles=new LinearLayout(this);titles.setOrientation(LinearLayout.VERTICAL);titles.addView(tv(title,text,22,true));titles.addView(tv(subtitle,muted,10,false));row.addView(titles,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));content.addView(row);gap(content,13);
+    private void detailRow(LinearLayout parent,String label,String value) {
+        gap(parent,12);
+        TextView l = tv(label.toUpperCase(Locale.getDefault()),muted,9,true);
+        parent.addView(l);
+        TextView v = tv(value,text,12,false);
+        v.setPadding(0,dp(3),0,0);
+        parent.addView(v);
     }
 
-    private LinearLayout card(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setBackground(cardDrawable(surface,dp(22),stroke));return v;}
-    private GradientDrawable inputDrawable(){return cardDrawable(surface2,dp(14),stroke);}
-    private GradientDrawable cardDrawable(int color,int radius,int strokeColor){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(radius);if(strokeColor!=Color.TRANSPARENT)d.setStroke(dp(1),strokeColor);return d;}
-    private TextView tv(String value,int color,int sp,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextColor(color);t.setTextSize(sp);if(bold)t.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));t.setLineSpacing(0,1.08f);return t;}
-    private TextView pill(String value,int color,int background){TextView t=tv(value,color,10,true);t.setGravity(Gravity.CENTER);t.setPadding(dp(11),dp(7),dp(11),dp(7));t.setBackground(cardDrawable(background,dp(14),Color.TRANSPARENT));return t;}
-    private TextView infoChip(String value){TextView t=tv(value,muted,11,true);t.setGravity(Gravity.CENTER);t.setBackground(cardDrawable(surface2,dp(14),stroke));return t;}
-    private Button primaryButton(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);b.setTextColor(Color.WHITE);b.setTextSize(13);b.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));b.setBackground(cardDrawable(accent,dp(16),Color.TRANSPARENT));return b;}
-    private Button compactPrimary(String value){return primaryButton(value);}
-    private Button secondaryButton(String value){Button b=new Button(this);b.setText(value);b.setAllCaps(false);b.setTextColor(text);b.setTextSize(11);b.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));b.setBackground(cardDrawable(surface2,dp(14),stroke));return b;}
-    private Button dangerButton(String value){Button b=secondaryButton(value);b.setTextColor(danger);return b;}
-    private LinearLayout infoCard(String title,String subtitle,int color){LinearLayout b=card();b.setPadding(dp(15),dp(14),dp(15),dp(14));LinearLayout line=new LinearLayout(this);line.setOrientation(LinearLayout.HORIZONTAL);TextView dot=tv("●",color,11,true);line.addView(dot,new LinearLayout.LayoutParams(dp(23),ViewGroup.LayoutParams.WRAP_CONTENT));LinearLayout texts=new LinearLayout(this);texts.setOrientation(LinearLayout.VERTICAL);texts.addView(tv(title,text,13,true));texts.addView(tv(subtitle,muted,10,false));line.addView(texts,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));b.addView(line);return b;}
-    private LinearLayout statCard(String label,String value,String caption){LinearLayout c=card();c.setPadding(dp(14),dp(13),dp(14),dp(13));c.addView(tv(label,muted,9,true));c.addView(tv(value,text,19,true));c.addView(tv(caption,muted,9,false));return c;}
-    private View upcomingCard(AppDatabase.Record r){LinearLayout c=card();c.setPadding(dp(15),dp(13),dp(15),dp(13));LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);TextView dot=tv("●",warning,11,true);row.addView(dot,new LinearLayout.LayoutParams(dp(24),ViewGroup.LayoutParams.WRAP_CONTENT));LinearLayout texts=new LinearLayout(this);texts.setOrientation(LinearLayout.VERTICAL);texts.addView(tv(r.title,text,14,true));String next=!r.nextDate.isEmpty()?r.nextDate:(r.nextKm>0?formatInt(r.nextKm)+" km":"Planlı işlem");texts.addView(tv(r.type+"  •  "+next,muted,10,false));row.addView(texts,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));c.addView(row);c.setOnClickListener(v->openRecordDetail(r.id));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);lp.setMargins(0,0,0,dp(9));c.setLayoutParams(lp);return c;}
-    private void sectionTitle(LinearLayout p,String title,String sub){p.addView(tv(title,text,17,true));TextView s=tv(sub,muted,10,false);s.setPadding(0,dp(2),0,dp(9));p.addView(s);}
-    private void gap(LinearLayout p,int h){p.addView(new Space(this),new LinearLayout.LayoutParams(1,dp(h)));}
-    private void gapHorizontal(LinearLayout p,int w){p.addView(new Space(this),new LinearLayout.LayoutParams(dp(w),1));}
-    private int dp(int v){return(int)(v*getResources().getDisplayMetrics().density+0.5f);}
-
-    private String moduleTitle(String m){if("Bakım".equals(m))return"Bakım & Onarım";if("Sigorta/Kasko".equals(m))return"Sigorta & Kasko";return m;}
-    private String moduleSubtitle(String m){if("Bakım".equals(m))return"Bakım, değişen parçalar ve sonraki işlem";if("Hasar".equals(m))return"Hasar, onarım ve belgeler";if("Ekspertiz".equals(m))return"Ekspertiz rapor geçmişi";if("Muayene".equals(m))return"Muayene sonucu ve sonraki tarih";if("Vergi".equals(m))return"Vergi ve ödeme geçmişi";if("Sigorta/Kasko".equals(m))return"Poliçe ve bitiş tarihleri";if("Yakıt".equals(m))return"Yakıt, litre/kWh, tutar ve km";return"Diğer araç harcamaları";}
-    private String moduleMark(String m){if("Bakım".equals(m))return"B";if("Hasar".equals(m))return"H";if("Ekspertiz".equals(m))return"E";if("Muayene".equals(m))return"M";if("Vergi".equals(m))return"V";if("Sigorta/Kasko".equals(m))return"S";if("Yakıt".equals(m))return"Y";return"₺";}
-    private int moduleColor(String m){if("Hasar".equals(m))return danger;if("Ekspertiz".equals(m))return warning;if("Muayene".equals(m))return Color.rgb(87,147,255);if("Vergi".equals(m))return Color.rgb(167,111,235);if("Sigorta/Kasko".equals(m))return Color.rgb(62,157,191);if("Yakıt".equals(m))return Color.rgb(237,146,41);return accent;}
-    private String normalizeModule(String type){if("Sigorta".equals(type)||"Kasko".equals(type))return"Sigorta/Kasko";return type;}
-    private String moduleEmptyText(String module){if("Yakıt".equals(module))return"İlk dolumunu litre/kWh, tutar ve kilometre bilgisiyle kaydet.";if("Bakım".equals(module))return"İlk bakım kaydını ekleyerek aracın servis geçmişini oluşturmaya başla.";return"İlk "+moduleTitle(module).toLowerCase(new Locale("tr","TR"))+" kaydını ekleyebilirsin.";}
-    private String titleHint(String m){if("Bakım".equals(m))return"İşlem başlığı";if("Hasar".equals(m))return"Hasar başlığı";if("Ekspertiz".equals(m))return"Firma / rapor başlığı";if("Muayene".equals(m))return"Muayene başlığı";if("Vergi".equals(m))return"Dönem / kayıt başlığı";if("Sigorta/Kasko".equals(m))return"Sigorta şirketi / başlık";if("Yakıt".equals(m))return"İstasyon / dolum başlığı";return"Başlık";}
-    private String defaultTitle(String m){if("Bakım".equals(m))return"Periyodik bakım";if("Hasar".equals(m))return"Hasar kaydı";if("Ekspertiz".equals(m))return"Ekspertiz";if("Muayene".equals(m))return"Periyodik muayene";if("Vergi".equals(m))return"MTV ödemesi";if("Sigorta/Kasko".equals(m))return"Poliçe";if("Yakıt".equals(m))return"Yakıt alımı";return m;}
-    private String fuelRecordDefault(String vehicleFuel){if(vehicleFuel==null)return"Benzin";if(vehicleFuel.contains("LPG"))return"LPG";if(vehicleFuel.contains("Dizel"))return"Dizel";if(vehicleFuel.contains("Elektrik")&&!vehicleFuel.contains("Hibrit"))return"Elektrik";return"Benzin";}
-
-    private void pickVehicleImage(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");startActivityForResult(i,PICK_VEHICLE_IMAGE);}
-    private void pickGalleryImage(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");startActivityForResult(i,PICK_GALLERY_IMAGE);}
-    private void pickRecordAttachment(long id){pendingAttachmentRecordId=id;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","application/pdf"});startActivityForResult(i,PICK_RECORD_ATTACHMENT);}
-
-    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();try{getContentResolver().takePersistableUriPermission(uri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
-        if(requestCode==PICK_VEHICLE_IMAGE){prefs.edit().putString("vehicle_photo_uri",uri.toString()).apply();renderPage(0);}else if(requestCode==PICK_GALLERY_IMAGE){db.addPhoto(uri.toString(),today());renderPage(2);}else if(requestCode==PICK_RECORD_ATTACHMENT&&pendingAttachmentRecordId>=0){db.setRecordAttachment(pendingAttachmentRecordId,uri.toString());long id=pendingAttachmentRecordId;pendingAttachmentRecordId=-1;openRecordDetail(id);}}
-    private void openAttachment(String u){try{Intent i=new Intent(Intent.ACTION_VIEW);i.setData(Uri.parse(u));i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(i);}catch(Exception e){toast("Belge açılamadı");}}
-
-    private void requestNotificationPermissionIfNeeded(){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},401);}
-    private boolean notificationsEnabled(){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)return false;NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);return Build.VERSION.SDK_INT<24||nm.areNotificationsEnabled();}
-
-    private void createVehiclePdf(){
-        android.graphics.pdf.PdfDocument doc=new android.graphics.pdf.PdfDocument();Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);AppDatabase.Vehicle vehicle=db.getVehicle();List<AppDatabase.Record> records=db.getRecords(100);int pageW=595,pageH=842,pageNo=1,y=54;android.graphics.pdf.PdfDocument.Page page=doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());Canvas canvas=page.getCanvas();
-        String photoUri=prefs.getString("vehicle_photo_uri","");if(!photoUri.isEmpty()){try(InputStream in=getContentResolver().openInputStream(Uri.parse(photoUri))){Bitmap b=BitmapFactory.decodeStream(in);if(b!=null){float maxW=510,maxH=230;float scale=Math.min(maxW/b.getWidth(),maxH/b.getHeight());float w=b.getWidth()*scale,h=b.getHeight()*scale;canvas.drawBitmap(b,null,new android.graphics.RectF(42,y,42+w,y+h),paint);y+=(int)h+24;}}}catch(Exception ignored){}}
-        paint.setColor(Color.rgb(8,163,118));paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));paint.setTextSize(22);canvas.drawText("ARAÇ DEFTERİ • ARAÇ CV",42,y,paint);y+=35;paint.setColor(Color.BLACK);paint.setTextSize(19);canvas.drawText(vehicle.year+" "+vehicle.brand+" "+vehicle.model,42,y,paint);y+=23;paint.setTypeface(Typeface.DEFAULT);paint.setTextSize(10);paint.setColor(Color.DKGRAY);canvas.drawText(formatInt(vehicle.km)+" km • "+vehicle.fuelType,42,y,paint);y+=28;paint.setColor(Color.BLACK);paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));paint.setTextSize(14);canvas.drawText("Araç zaman çizelgesi",42,y,paint);y+=20;
-        for(AppDatabase.Record r:records){if(y>765){doc.finishPage(page);pageNo++;page=doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());canvas=page.getCanvas();y=52;}paint.setColor(Color.BLACK);paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));paint.setTextSize(10);canvas.drawText(r.type+" • "+truncate(r.title,58),42,y,paint);y+=13;paint.setTypeface(Typeface.DEFAULT);paint.setColor(Color.DKGRAY);canvas.drawText(r.date+" | "+formatInt(r.km)+" km"+(r.cost>0?" | "+formatMoney(r.cost):""),42,y,paint);y+=12;if(!r.detail.isEmpty()){canvas.drawText(truncate(r.detail.replace('\n',' '),78),42,y,paint);y+=12;}y+=7;}
-        if(y>730){doc.finishPage(page);pageNo++;page=doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());canvas=page.getCanvas();y=55;}paint.setTextSize(8);paint.setColor(Color.DKGRAY);paint.setTypeface(Typeface.DEFAULT);canvas.drawText("Bilgiler araç sahibi tarafından oluşturulan kayıtlardan derlenmiştir; resmî ekspertiz veya kilometre doğrulama belgesi değildir.",42,y,paint);doc.finishPage(page);
-        try{String fileName="Arac-CV-"+System.currentTimeMillis()+".pdf";Uri uri;if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q){ContentValues values=new ContentValues();values.put(MediaStore.MediaColumns.DISPLAY_NAME,fileName);values.put(MediaStore.MediaColumns.MIME_TYPE,"application/pdf");values.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/AracDefteri");uri=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);if(uri==null)throw new Exception("Dosya oluşturulamadı");try(OutputStream out=getContentResolver().openOutputStream(uri)){doc.writeTo(out);}}else{File dir=getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);if(dir==null)throw new Exception("Klasör bulunamadı");File file=new File(dir,fileName);try(OutputStream out=new FileOutputStream(file)){doc.writeTo(out);}uri=Uri.fromFile(file);}doc.close();toast("Araç CV oluşturuldu");if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q)openPdf(uri);}catch(Exception e){doc.close();toast("PDF oluşturulamadı: "+e.getMessage());}
+    private void addHeader(LinearLayout content,String title,String subtitle) {
+        content.addView(tv(title,text,27,true));
+        TextView sub = tv(subtitle,muted,11,false);
+        sub.setPadding(0,dp(3),0,0);
+        content.addView(sub);
+        gap(content,17);
     }
-    private void openPdf(Uri uri){try{Intent i=new Intent(Intent.ACTION_VIEW);i.setDataAndType(uri,"application/pdf");i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(i);}catch(Exception ignored){}}
 
-    private String today(){return new SimpleDateFormat("dd.MM.yyyy",Locale.getDefault()).format(new Date());}
-    private String formatMoney(double v){NumberFormat nf=NumberFormat.getNumberInstance(new Locale("tr","TR"));nf.setMaximumFractionDigits(2);return nf.format(v)+" ₺";}
-    private String formatInt(int v){return NumberFormat.getIntegerInstance(new Locale("tr","TR")).format(v);}
-    private String trimDouble(double v){if(Math.abs(v-Math.rint(v))<0.00001)return String.valueOf((long)Math.rint(v));return String.format(Locale.getDefault(),"%.2f",v).replaceAll("0+$","").replaceAll("[.,]$","");}
-    private String moneyRaw(double v){return v>0?trimDouble(v):"";}
-    private int safeInt(String s,int f){try{return Integer.parseInt(s.trim());}catch(Exception e){return f;}}
-    private double safeDouble(String s){try{return Double.parseDouble(s.trim().replace(',','.'));}catch(Exception e){return 0;}}
-    private String join(List<String> values,String sep){StringBuilder b=new StringBuilder();for(String v:values){if(b.length()>0)b.append(sep);b.append(v);}return b.toString();}
-    private String truncate(String s,int max){return s.length()<=max?s:s.substring(0,max-1)+"…";}
-    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
+    private void addBackHeader(LinearLayout content,String title,String subtitle,Runnable backAction) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back = tv("‹",text,34,false);
+        back.setGravity(Gravity.CENTER);
+        back.setOnClickListener(v -> backAction.run());
+        row.addView(back,new LinearLayout.LayoutParams(dp(44),dp(48)));
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(tv(title,text,22,true));
+        titles.addView(tv(subtitle,muted,10,false));
+        row.addView(titles,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        content.addView(row);
+        gap(content,13);
+    }
+
+    private LinearLayout card() {
+        LinearLayout v = new LinearLayout(this);
+        v.setOrientation(LinearLayout.VERTICAL);
+        v.setBackground(cardDrawable(surface,dp(22),stroke));
+        return v;
+    }
+
+    private GradientDrawable inputDrawable() { return cardDrawable(surface2,dp(14),stroke); }
+
+    private GradientDrawable cardDrawable(int color,int radius,int strokeColor) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(radius);
+        if(strokeColor != Color.TRANSPARENT) d.setStroke(dp(1),strokeColor);
+        return d;
+    }
+
+    private TextView tv(String value,int color,int sp,boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(value);
+        t.setTextColor(color);
+        t.setTextSize(sp);
+        if(bold) t.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+        t.setLineSpacing(0,1.08f);
+        return t;
+    }
+
+    private TextView pill(String value,int color,int background) {
+        TextView t = tv(value,color,10,true);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(11),dp(7),dp(11),dp(7));
+        t.setBackground(cardDrawable(background,dp(14),Color.TRANSPARENT));
+        return t;
+    }
+
+    private TextView infoChip(String value) {
+        TextView t = tv(value,muted,11,true);
+        t.setGravity(Gravity.CENTER);
+        t.setBackground(cardDrawable(surface2,dp(14),stroke));
+        return t;
+    }
+
+    private Button primaryButton(String value) {
+        Button b = new Button(this);
+        b.setText(value);
+        b.setAllCaps(false);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(13);
+        b.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+        b.setBackground(cardDrawable(accent,dp(16),Color.TRANSPARENT));
+        return b;
+    }
+
+    private Button compactPrimary(String value) { return primaryButton(value); }
+
+    private Button secondaryButton(String value) {
+        Button b = new Button(this);
+        b.setText(value);
+        b.setAllCaps(false);
+        b.setTextColor(text);
+        b.setTextSize(11);
+        b.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+        b.setBackground(cardDrawable(surface2,dp(14),stroke));
+        return b;
+    }
+
+    private Button dangerButton(String value) {
+        Button b = secondaryButton(value);
+        b.setTextColor(danger);
+        return b;
+    }
+
+    private LinearLayout infoCard(String title,String subtitle,int color) {
+        LinearLayout b = card();
+        b.setPadding(dp(15),dp(14),dp(15),dp(14));
+        LinearLayout line = new LinearLayout(this);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        TextView dot = tv("●",color,11,true);
+        line.addView(dot,new LinearLayout.LayoutParams(dp(23),ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(tv(title,text,13,true));
+        texts.addView(tv(subtitle,muted,10,false));
+        line.addView(texts,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        b.addView(line);
+        return b;
+    }
+
+    private LinearLayout statCard(String label,String value,String caption) {
+        LinearLayout c = card();
+        c.setPadding(dp(14),dp(13),dp(14),dp(13));
+        c.addView(tv(label,muted,9,true));
+        c.addView(tv(value,text,19,true));
+        c.addView(tv(caption,muted,9,false));
+        return c;
+    }
+
+    private View upcomingCard(AppDatabase.Record r) {
+        LinearLayout c = card();
+        c.setPadding(dp(15),dp(13),dp(15),dp(13));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView dot = tv("●",warning,11,true);
+        row.addView(dot,new LinearLayout.LayoutParams(dp(24),ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout texts = new LinearLayout(this);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.addView(tv(r.title,text,14,true));
+        String next = !r.nextDate.isEmpty() ? r.nextDate : (r.nextKm>0 ? formatInt(r.nextKm)+" km" : "Planlı işlem");
+        texts.addView(tv(r.type+"  •  "+next,muted,10,false));
+        row.addView(texts,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        c.addView(row);
+        c.setOnClickListener(v -> openRecordDetail(r.id));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0,0,0,dp(9));
+        c.setLayoutParams(lp);
+        return c;
+    }
+
+    private void sectionTitle(LinearLayout p,String title,String sub) {
+        p.addView(tv(title,text,17,true));
+        TextView s = tv(sub,muted,10,false);
+        s.setPadding(0,dp(2),0,dp(9));
+        p.addView(s);
+    }
+
+    private void gap(LinearLayout p,int h) { p.addView(new Space(this),new LinearLayout.LayoutParams(1,dp(h))); }
+    private void gapHorizontal(LinearLayout p,int w) { p.addView(new Space(this),new LinearLayout.LayoutParams(dp(w),1)); }
+    private int dp(int v) { return(int)(v*getResources().getDisplayMetrics().density+0.5f); }
+
+    private String moduleTitle(String m) {
+        if("Bakım".equals(m)) return "Bakım & Onarım";
+        if("Sigorta/Kasko".equals(m)) return "Sigorta & Kasko";
+        return m;
+    }
+
+    private String moduleSubtitle(String m) {
+        if("Bakım".equals(m)) return "Bakım, değişen parçalar ve sonraki işlem";
+        if("Hasar".equals(m)) return "Hasar, onarım ve belgeler";
+        if("Ekspertiz".equals(m)) return "Ekspertiz rapor geçmişi";
+        if("Muayene".equals(m)) return "Muayene sonucu ve sonraki tarih";
+        if("Vergi".equals(m)) return "Vergi ve ödeme geçmişi";
+        if("Sigorta/Kasko".equals(m)) return "Poliçe ve bitiş tarihleri";
+        if("Yakıt".equals(m)) return "Yakıt, litre/kWh, tutar ve km";
+        return "Diğer araç harcamaları";
+    }
+
+    private String moduleMark(String m) {
+        if("Bakım".equals(m)) return "B";
+        if("Hasar".equals(m)) return "H";
+        if("Ekspertiz".equals(m)) return "E";
+        if("Muayene".equals(m)) return "M";
+        if("Vergi".equals(m)) return "V";
+        if("Sigorta/Kasko".equals(m)) return "S";
+        if("Yakıt".equals(m)) return "Y";
+        return "₺";
+    }
+
+    private int moduleColor(String m) {
+        if("Hasar".equals(m)) return danger;
+        if("Ekspertiz".equals(m)) return warning;
+        if("Muayene".equals(m)) return Color.rgb(87,147,255);
+        if("Vergi".equals(m)) return Color.rgb(167,111,235);
+        if("Sigorta/Kasko".equals(m)) return Color.rgb(62,157,191);
+        if("Yakıt".equals(m)) return Color.rgb(237,146,41);
+        return accent;
+    }
+
+    private String normalizeModule(String type) {
+        if("Sigorta".equals(type)||"Kasko".equals(type)) return "Sigorta/Kasko";
+        return type;
+    }
+
+    private String moduleEmptyText(String module) {
+        if("Yakıt".equals(module)) return "İlk dolumunu litre/kWh, tutar ve kilometre bilgisiyle kaydet.";
+        if("Bakım".equals(module)) return "İlk bakım kaydını ekleyerek aracın servis geçmişini oluşturmaya başla.";
+        return "İlk "+moduleTitle(module).toLowerCase(new Locale("tr","TR"))+" kaydını ekleyebilirsin.";
+    }
+
+    private String titleHint(String m) {
+        if("Bakım".equals(m)) return "İşlem başlığı";
+        if("Hasar".equals(m)) return "Hasar başlığı";
+        if("Ekspertiz".equals(m)) return "Firma / rapor başlığı";
+        if("Muayene".equals(m)) return "Muayene başlığı";
+        if("Vergi".equals(m)) return "Dönem / kayıt başlığı";
+        if("Sigorta/Kasko".equals(m)) return "Sigorta şirketi / başlık";
+        if("Yakıt".equals(m)) return "İstasyon / dolum başlığı";
+        return "Başlık";
+    }
+
+    private String defaultTitle(String m) {
+        if("Bakım".equals(m)) return "Periyodik bakım";
+        if("Hasar".equals(m)) return "Hasar kaydı";
+        if("Ekspertiz".equals(m)) return "Ekspertiz";
+        if("Muayene".equals(m)) return "Periyodik muayene";
+        if("Vergi".equals(m)) return "MTV ödemesi";
+        if("Sigorta/Kasko".equals(m)) return "Poliçe";
+        if("Yakıt".equals(m)) return "Yakıt alımı";
+        return m;
+    }
+
+    private String fuelRecordDefault(String vehicleFuel) {
+        if(vehicleFuel==null) return "Benzin";
+        if(vehicleFuel.contains("LPG")) return "LPG";
+        if(vehicleFuel.contains("Dizel")) return "Dizel";
+        if(vehicleFuel.contains("Elektrik")&&!vehicleFuel.contains("Hibrit")) return "Elektrik";
+        return "Benzin";
+    }
+
+    private void pickVehicleImage() {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        startActivityForResult(i,PICK_VEHICLE_IMAGE);
+    }
+
+    private void pickGalleryImage() {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        startActivityForResult(i,PICK_GALLERY_IMAGE);
+    }
+
+    private void pickRecordAttachment(long id) {
+        pendingAttachmentRecordId=id;
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","application/pdf"});
+        startActivityForResult(i,PICK_RECORD_ATTACHMENT);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null) return;
+        Uri uri=data.getData();
+        try {
+            getContentResolver().takePersistableUriPermission(uri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch(Exception ignored) {}
+        if(requestCode==PICK_VEHICLE_IMAGE) {
+            prefs.edit().putString("vehicle_photo_uri",uri.toString()).apply();
+            renderPage(0);
+        } else if(requestCode==PICK_GALLERY_IMAGE) {
+            db.addPhoto(uri.toString(),today());
+            renderPage(2);
+        } else if(requestCode==PICK_RECORD_ATTACHMENT&&pendingAttachmentRecordId>=0) {
+            db.setRecordAttachment(pendingAttachmentRecordId,uri.toString());
+            long id=pendingAttachmentRecordId;
+            pendingAttachmentRecordId=-1;
+            openRecordDetail(id);
+        }
+    }
+
+    private void openAttachment(String u) {
+        try {
+            Intent i=new Intent(Intent.ACTION_VIEW);
+            i.setData(Uri.parse(u));
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(i);
+        } catch(Exception e) {
+            toast("Belge açılamadı");
+        }
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},401);
+        }
+    }
+
+    private boolean notificationsEnabled() {
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) return false;
+        NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+        return Build.VERSION.SDK_INT<24||nm.areNotificationsEnabled();
+    }
+
+    private void createVehiclePdf() {
+        android.graphics.pdf.PdfDocument doc = new android.graphics.pdf.PdfDocument();
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        AppDatabase.Vehicle vehicle = db.getVehicle();
+        List<AppDatabase.Record> records = db.getRecords(100);
+        int pageW = 595;
+        int pageH = 842;
+        int pageNo = 1;
+        int y = 54;
+        android.graphics.pdf.PdfDocument.Page page = doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());
+        Canvas canvas = page.getCanvas();
+
+        String photoUri = prefs.getString("vehicle_photo_uri", "");
+        if (!photoUri.isEmpty()) {
+            try (InputStream in = getContentResolver().openInputStream(Uri.parse(photoUri))) {
+                Bitmap b = BitmapFactory.decodeStream(in);
+                if (b != null) {
+                    float maxW = 510;
+                    float maxH = 230;
+                    float scale = Math.min(maxW / b.getWidth(), maxH / b.getHeight());
+                    float w = b.getWidth() * scale;
+                    float h = b.getHeight() * scale;
+                    canvas.drawBitmap(b, null, new android.graphics.RectF(42, y, 42 + w, y + h), paint);
+                    y += (int) h + 24;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        paint.setColor(Color.rgb(8,163,118));
+        paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+        paint.setTextSize(22);
+        canvas.drawText("ARAÇ DEFTERİ • ARAÇ CV",42,y,paint);
+        y+=35;
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(19);
+        canvas.drawText(vehicle.year+" "+vehicle.brand+" "+vehicle.model,42,y,paint);
+        y+=23;
+        paint.setTypeface(Typeface.DEFAULT);
+        paint.setTextSize(10);
+        paint.setColor(Color.DKGRAY);
+        canvas.drawText(formatInt(vehicle.km)+" km • "+vehicle.fuelType,42,y,paint);
+        y+=28;
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+        paint.setTextSize(14);
+        canvas.drawText("Araç zaman çizelgesi",42,y,paint);
+        y+=20;
+
+        for(AppDatabase.Record r:records) {
+            if(y>765) {
+                doc.finishPage(page);
+                pageNo++;
+                page=doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());
+                canvas=page.getCanvas();
+                y=52;
+            }
+            paint.setColor(Color.BLACK);
+            paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
+            paint.setTextSize(10);
+            canvas.drawText(r.type+" • "+truncate(r.title,58),42,y,paint);
+            y+=13;
+            paint.setTypeface(Typeface.DEFAULT);
+            paint.setColor(Color.DKGRAY);
+            canvas.drawText(r.date+" | "+formatInt(r.km)+" km"+(r.cost>0?" | "+formatMoney(r.cost):""),42,y,paint);
+            y+=12;
+            if(!r.detail.isEmpty()) {
+                canvas.drawText(truncate(r.detail.replace('\n',' '),78),42,y,paint);
+                y+=12;
+            }
+            y+=7;
+        }
+
+        if(y>730) {
+            doc.finishPage(page);
+            pageNo++;
+            page=doc.startPage(new android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());
+            canvas=page.getCanvas();
+            y=55;
+        }
+        paint.setTextSize(8);
+        paint.setColor(Color.DKGRAY);
+        paint.setTypeface(Typeface.DEFAULT);
+        canvas.drawText("Bilgiler araç sahibi tarafından oluşturulan kayıtlardan derlenmiştir; resmî ekspertiz veya kilometre doğrulama belgesi değildir.",42,y,paint);
+        doc.finishPage(page);
+
+        try {
+            String fileName="Arac-CV-"+System.currentTimeMillis()+".pdf";
+            Uri uri;
+            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q) {
+                ContentValues values=new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME,fileName);
+                values.put(MediaStore.MediaColumns.MIME_TYPE,"application/pdf");
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/AracDefteri");
+                uri=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+                if(uri==null) throw new Exception("Dosya oluşturulamadı");
+                try(OutputStream out=getContentResolver().openOutputStream(uri)) {
+                    doc.writeTo(out);
+                }
+            } else {
+                File dir=getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+                if(dir==null) throw new Exception("Klasör bulunamadı");
+                File file=new File(dir,fileName);
+                try(OutputStream out=new FileOutputStream(file)) {
+                    doc.writeTo(out);
+                }
+                uri=Uri.fromFile(file);
+            }
+            doc.close();
+            toast("Araç CV oluşturuldu");
+            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q) openPdf(uri);
+        } catch(Exception e) {
+            doc.close();
+            toast("PDF oluşturulamadı: "+e.getMessage());
+        }
+    }
+
+    private void openPdf(Uri uri) {
+        try {
+            Intent i=new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri,"application/pdf");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(i);
+        } catch(Exception ignored) {}
+    }
+
+    private String today() { return new SimpleDateFormat("dd.MM.yyyy",Locale.getDefault()).format(new Date()); }
+
+    private String formatMoney(double v) {
+        NumberFormat nf=NumberFormat.getNumberInstance(new Locale("tr","TR"));
+        nf.setMaximumFractionDigits(2);
+        return nf.format(v)+" ₺";
+    }
+
+    private String formatInt(int v) { return NumberFormat.getIntegerInstance(new Locale("tr","TR")).format(v); }
+
+    private String trimDouble(double v) {
+        if(Math.abs(v-Math.rint(v))<0.00001) return String.valueOf((long)Math.rint(v));
+        return String.format(Locale.getDefault(),"%.2f",v).replaceAll("0+$","").replaceAll("[.,]$","");
+    }
+
+    private String moneyRaw(double v) { return v>0?trimDouble(v):""; }
+    private int safeInt(String s,int f) { try{return Integer.parseInt(s.trim());}catch(Exception e){return f;} }
+    private double safeDouble(String s) { try{return Double.parseDouble(s.trim().replace(',','.'));}catch(Exception e){return 0;} }
+
+    private String join(List<String> values,String sep) {
+        StringBuilder b=new StringBuilder();
+        for(String v:values) {
+            if(b.length()>0) b.append(sep);
+            b.append(v);
+        }
+        return b.toString();
+    }
+
+    private String truncate(String s,int max) { return s.length()<=max?s:s.substring(0,max-1)+"…"; }
+    private void toast(String s) { Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
 }
