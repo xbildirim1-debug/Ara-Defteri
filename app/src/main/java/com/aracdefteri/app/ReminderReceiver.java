@@ -9,12 +9,13 @@ import android.content.Intent;
 import android.os.Build;
 
 public class ReminderReceiver extends BroadcastReceiver {
-    public static final String CHANNEL_ID = "vehicle_reminders";
+    public static final String CHANNEL_ID = "vehicle_reminders_v2";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         String title = intent.getStringExtra("title");
         String text = intent.getStringExtra("text");
+        int notificationId = intent.getIntExtra("notification_id", (int) (System.currentTimeMillis() % 100000));
         if (title == null) title = "Araç Defteri hatırlatması";
         if (text == null) text = "Yaklaşan bir araç işlemin var.";
 
@@ -23,13 +24,15 @@ public class ReminderReceiver extends BroadcastReceiver {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "Araç hatırlatmaları",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                    NotificationManager.IMPORTANCE_HIGH
             );
-            channel.setDescription("Bakım, sigorta, muayene ve diğer araç hatırlatmaları");
+            channel.setDescription("Bakım, sigorta, muayene, vergi ve diğer araç hatırlatmaları");
+            channel.enableVibration(true);
             manager.createNotificationChannel(channel);
         }
 
-        Intent open = new Intent(context, ModernMainActivity.class);
+        Intent open = new Intent(context, NextMainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pending = PendingIntent.getActivity(
                 context,
                 0,
@@ -44,9 +47,12 @@ public class ReminderReceiver extends BroadcastReceiver {
         builder.setSmallIcon(com.aracdefteri.app.R.drawable.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(text)
+                .setStyle(new android.app.Notification.BigTextStyle().bigText(text))
                 .setAutoCancel(true)
                 .setContentIntent(pending);
-
-        manager.notify((int) (System.currentTimeMillis() % 100000), builder.build());
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setPriority(android.app.Notification.PRIORITY_HIGH);
+        }
+        manager.notify(notificationId, builder.build());
     }
 }
