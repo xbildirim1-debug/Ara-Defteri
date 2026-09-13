@@ -724,36 +724,33 @@ private void renderPage(int page) {
 
 private void renderCv(LinearLayout content) {
         AppDatabase.Vehicle v = db.getVehicle();
-        TextView title = tv("Araç CV", text, 23, true);
+        String cvVariant = prefs.getString("vehicle_catalog_variant", "").trim();
+        if (cvVariant.isEmpty()) {
+            cvVariant = (prefs.getString("vehicle_engine", "") + " " + prefs.getString("vehicle_trim", "")).trim();
+        }
+        String fullCvName = (v.year + " " + v.brand + " " + v.model + (cvVariant.isEmpty() ? "" : " " + cvVariant)).replaceAll("\\s+", " ").trim();
+
+        TextView title = tv("Araç CV", text, 22, true);
         content.addView(title);
-        TextView subtitle = tv(v.year + " " + v.brand + " " + v.model + " için paylaşılabilir araç geçmişi", muted, 10, false);
-        subtitle.setPadding(0,dp(2),0,dp(11));
+        TextView subtitle = tv(fullCvName, muted, 10, false);
+        subtitle.setPadding(0,dp(2),0,dp(9));
         content.addView(subtitle);
 
         LinearLayout summary = card();
-        summary.setPadding(dp(14),dp(13),dp(14),dp(13));
-        summary.addView(tv(v.year + "  " + v.brand + " " + v.model, text, 18, true));
-        String meta = prefs.getString("vehicle_trim", "") + "  •  " + prefs.getString("vehicle_engine", "");
+        summary.setPadding(dp(13),dp(11),dp(13),dp(11));
+        summary.addView(tv(fullCvName, text, 16, true));
+        String meta = (prefs.getString("vehicle_body", "") + "  •  " + v.fuelType + "  •  " + prefs.getString("vehicle_transmission", "")).trim();
         meta = meta.replaceFirst("^\\s*•\\s*", "").replaceFirst("\\s*•\\s*$", "");
-        if (!meta.trim().isEmpty()) summary.addView(tv(meta, muted, 10, false));
-        gap(summary,9);
-        LinearLayout mini = new LinearLayout(this);
-        mini.setOrientation(LinearLayout.HORIZONTAL);
-        mini.addView(statCard("BAKIM", String.valueOf(db.countRecordsByType("Bakım")), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
-        gapHorizontal(mini,7);
-        mini.addView(statCard("HASAR", String.valueOf(db.countRecordsByType("Hasar")), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
-        gapHorizontal(mini,7);
-        mini.addView(statCard("TOPLAM", String.valueOf(db.countAllRecords()), "kayıt"), new LinearLayout.LayoutParams(0,dp(74),1f));
-        summary.addView(mini);
+        if (!meta.trim().isEmpty()) summary.addView(tv(meta, muted, 9, false));
         content.addView(summary);
-        gap(content,13);
+        gap(content,10);
 
-        sectionTitle(content, "CV fotoğrafları", "Ana araç fotoğrafına ek olarak en fazla 10 fotoğraf");
+        sectionTitle(content, "Araç resimleri", "Ana araç fotoğrafına ek olarak en fazla 10 fotoğraf");
         LinearLayout photoCard = card();
         photoCard.setPadding(dp(12),dp(11),dp(12),dp(11));
-        cvPhotoCountView = tv(cvPhotoUris.size() + " / " + VehicleCvPdf.MAX_EXTRA_PHOTOS + " fotoğraf seçildi", text, 12, true);
+        cvPhotoCountView = tv(cvPhotoUris.size() + " / " + VehicleCvPdf.MAX_EXTRA_PHOTOS + " araç resmi seçildi", text, 12, true);
         photoCard.addView(cvPhotoCountView);
-        photoCard.addView(tv("Bu fotoğraflar yalnız oluşturulan PDF içinde kullanılır.", muted, 9, false));
+        photoCard.addView(tv("Seçilen araç resimleri yalnız oluşturulan PDF içinde kullanılır.", muted, 9, false));
         gap(photoCard,8);
 
         if (!cvPhotoUris.isEmpty()) {
@@ -1542,7 +1539,7 @@ private void openVehicleForm() {
 
     private void pickCvImages() {
         if (cvPhotoUris.size() >= VehicleCvPdf.MAX_EXTRA_PHOTOS) {
-            toast("CV için en fazla 10 fotoğraf ekleyebilirsin");
+            toast("En fazla 10 araç resmi ekleyebilirsin");
             return;
         }
         Intent i = new Intent(Intent.ACTION_GET_CONTENT);
@@ -1580,7 +1577,7 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
             } else if (data.getData() != null) {
                 if (addCvPhotoUri(data.getData())) added++;
             }
-            if (added > 0) toast(added + " fotoğraf CV'ye eklendi");
+            if (added > 0) toast(added + " araç resmi eklendi");
             else if (cvPhotoUris.isEmpty()) toast("Fotoğraf seçilemedi");
             renderPage(2);
             return;
