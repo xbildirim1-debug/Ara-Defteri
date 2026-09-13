@@ -121,13 +121,6 @@ public final class VehicleCvPdf {
         else
             w.coverChip(307, y + 55, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", pref(prefs, "vehicle_engine"), pref(prefs, "vehicle_power")));
 
-        String note = pref(prefs, "cv_note");
-        if (!note.isEmpty()) {
-            int noteY = y + 118;
-            w.text("AÇIKLAMA", 38, noteY, 7, Writer.ACCENT_DARK, true);
-            w.drawWrapped(note, 38, noteY + 15, 8, Writer.DARK, false, Writer.CONTENT_W, 11);
-        }
-
         w.text("Bu belge Araç Defteri uygulaması ile kullanıcı kayıtlarından oluşturulmuştur; resmî doğrulama belgesi değildir.", 38, 786, 6.8f, Writer.MUTED, false);
     }
 

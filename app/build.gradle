@@ -10,8 +10,8 @@ android {
         applicationId 'com.aracdefteri.app'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '0.7.0-cv-cleanup-dev'
+        versionCode 8
+        versionName '0.7.1-cv-cleanup-dev'
     }
 
     buildTypes {
