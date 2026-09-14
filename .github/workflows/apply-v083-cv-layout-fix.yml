@@ -1,0 +1,103 @@
+name: Apply Araç Defteri v0.8.3 CV layout fix
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/apply-v083-cv-layout-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.8.3 fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # CV ekranında renk tekrar sorulmasın. Renk sadece araç profilinden alınsın.
+          p = Path('app/src/main/java/com/aracdefteri/app/NextMainActivity.java')
+          s = p.read_text()
+          s = s.replace('''        EditText color = formField(options, "Araç rengi", prefs.getString("vehicle_color", ""), InputType.TYPE_CLASS_TEXT);\n        color.setHint("Örn: Beyaz, İnci Beyazı, Metalik Gri");\n''', '', 1)
+          s = s.replace('''                    .putString("cv_sale_price", salePrice.getText().toString().trim())\n                    .putString("vehicle_color", color.getText().toString().trim())\n                    .putString("cv_phone", phone.getText().toString().trim())\n''', '''                    .putString("cv_sale_price", salePrice.getText().toString().trim())\n                    .putString("cv_phone", phone.getText().toString().trim())\n''', 1)
+          p.write_text(s)
+
+          # PDF: iletişim ve fiyat aynı satırda; fotoğraflar boş sayfa başlatmadan kalan alana devam etsin.
+          p = Path('app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java')
+          s = p.read_text()
+
+          old = '''        String phone = pref(prefs, "cv_phone");\n        if (!phone.isEmpty()) {\n            w.text("İletişim: " + phone, 38, y, 7.8f, Writer.ACCENT_DARK, true);\n            y += 14;\n        }\n\n        w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");\n'''
+          new = '''        String phone = pref(prefs, "cv_phone");\n        boolean showPrice = prefs.getBoolean("cv_show_price", false);\n        String price = pref(prefs, "cv_sale_price");\n        boolean hasPrice = showPrice && !price.isEmpty();\n        if (!phone.isEmpty() && hasPrice) {\n            w.coverChip(38, y, 250, "İLETİŞİM", phone);\n            w.coverChip(307, y, 250, "İSTENEN SATIŞ FİYATI", price + " ₺");\n            y += 46;\n        } else if (!phone.isEmpty()) {\n            w.coverChip(38, y, 519, "İLETİŞİM", phone);\n            y += 46;\n        } else if (hasPrice) {\n            w.coverChip(38, y, 519, "İSTENEN SATIŞ FİYATI", price + " ₺");\n            y += 46;\n        }\n\n        w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");\n'''
+          assert old in s, 'cover contact block not found'
+          s = s.replace(old, new, 1)
+
+          old = '''        boolean showPrice = prefs.getBoolean("cv_show_price", false);\n        String price = pref(prefs, "cv_sale_price");\n        if (showPrice && !price.isEmpty()) {\n            w.coverChip(38, y, 519, "İSTENEN SATIŞ FİYATI", price + " ₺");\n            y += 47;\n        }\n\n'''
+          assert old in s, 'old price block not found'
+          s = s.replace(old, '', 1)
+
+          start = s.index('    private static void drawPhotos(Activity activity, Writer w, List<Uri> selectedPhotos) {')
+          end = s.index('    private static Uri writeDocument(', start)
+          new_func = '''    private static void drawPhotos(Activity activity, Writer w, List<Uri> selectedPhotos) {\n        ArrayList<Uri> photos = new ArrayList<>();\n        if (selectedPhotos != null) {\n            for (Uri uri : selectedPhotos) {\n                if (uri == null) continue;\n                photos.add(uri);\n                if (photos.size() >= MAX_EXTRA_PHOTOS) break;\n            }\n        }\n        if (photos.isEmpty()) return;\n\n        // Geçmiş kayıtlarından sonra sayfada yer varsa fotoğrafları aynı sayfada sürdür.\n        // Böylece yarım dolu sayfa bırakıp gereksiz yeni sayfa açılmaz.\n        if (w.y + 195 > 790) w.newPage(true);\n        w.y += 4;\n        w.section("Araç Resimleri", null);\n\n        for (int index = 0; index < photos.size(); index++) {\n            if (w.y + 174 > 790) {\n                w.newPage(true);\n                w.section("Araç Resimleri", null);\n            }\n            Bitmap bitmap = loadBitmap(activity, photos.get(index), 1600);\n            if (bitmap == null) {\n                w.simpleCard("Araç resmi " + (index + 1), "Fotoğraf okunamadı", "");\n                continue;\n            }\n            w.label("ARAÇ RESMİ " + (index + 1) + " / " + photos.size());\n            w.drawImageFit(bitmap, Writer.LEFT, w.y + 3, Writer.CONTENT_W, 150);\n            w.y += 163;\n            bitmap.recycle();\n        }\n    }\n\n'''
+          s = s[:start] + new_func + s[end:]
+          p.write_text(s)
+
+          p = Path('app/build.gradle')
+          s = p.read_text()
+          s = s.replace('versionCode 10', 'versionCode 11')
+          s = s.replace("versionName '0.8.2-color-cv-fix-dev'", "versionName '0.8.3-cv-layout-fix-dev'")
+          p.write_text(s)
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Commit source changes
+        run: |
+          git config user.name "Araç Defteri Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java app/build.gradle
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "Fix CV spacing, price row and vehicle color source"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Prepare APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk "Arac-Defteri-v0.8.3-cv-layout-fix-dev.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arac-Defteri-v0.8.3-cv-layout-fix-dev
+          path: Arac-Defteri-v0.8.3-cv-layout-fix-dev.apk
