@@ -38,7 +38,7 @@ public final class TurkeyVehicleCatalog {
         add(TYPE_CAR, "Tofaş", "Şahin", "Doğan", "Doğan SLX", "Kartal", "Serçe", "Murat 124", "Murat 131");
         add(TYPE_CAR, "Volkswagen", "Polo", "Golf", "Passat", "Jetta", "Bora", "Vento", "Arteon", "CC", "Scirocco", "Beetle", "ID.3");
         add(TYPE_CAR, "Ford", "Fiesta", "Focus", "Mondeo", "Escort", "Taunus", "Fusion", "Mustang");
-        add(TYPE_CAR, "Toyota", "Corolla", "Corolla Sedan", "Auris", "Yaris", "Avensis", "Camry", "Prius", "Aygo", "Supra", "Celica");
+        add(TYPE_CAR, "Toyota", "Corolla", "Corolla Hybrid", "Corolla Sedan", "Auris", "Yaris", "Avensis", "Camry", "Prius", "Aygo", "Supra", "Celica");
         add(TYPE_CAR, "Hyundai", "i10", "i20", "i30", "Accent", "Accent Era", "Accent Blue", "Elantra", "Getz", "Sonata", "Ioniq");
         add(TYPE_CAR, "Peugeot", "106", "206", "207", "208", "301", "306", "307", "308", "408", "406", "407", "508", "RCZ");
         add(TYPE_CAR, "Citroën", "C1", "C2", "C3", "C4", "C5", "C-Elysee", "Xsara", "Xantia", "Saxo", "AMI");

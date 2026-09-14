@@ -48,6 +48,15 @@ public final class TurkeyVehicleSpecs {
         add("Peugeot", "3008", 2025, 2026, "1.2 Hybrid 145 e-DCS6", "III", "Allure", "SUV", "Hibrit / Benzin", "DCT / EDC / DSG", "1.2 Hybrid", "145 hp", "Önden çekiş");
         add("Peugeot", "3008", 2025, 2026, "1.2 Hybrid 145 e-DCS6 GT", "III", "GT", "SUV", "Hibrit / Benzin", "DCT / EDC / DSG", "1.2 Hybrid", "145 hp", "Önden çekiş");
 
+        // TOYOTA COROLLA E210 - Türkiye hibrit çekirdek varyantları.
+        add("Toyota", "Corolla Hybrid", 2019, 2022, "1.8 Hybrid 122 HP e-CVT", "E210", "", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "122 hp", "4X2");
+        add("Toyota", "Corolla Hybrid", 2019, 2022, "1.8 Hybrid 122 HP e-CVT • Dream", "E210", "Dream", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "122 hp", "4X2");
+        add("Toyota", "Corolla Hybrid", 2019, 2022, "1.8 Hybrid 122 HP e-CVT • Flame", "E210", "Flame", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "122 hp", "4X2");
+        add("Toyota", "Corolla Hybrid", 2019, 2022, "1.8 Hybrid 122 HP e-CVT • Passion", "E210", "Passion", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "122 hp", "4X2");
+        add("Toyota", "Corolla Hybrid", 2023, 2025, "1.8 Hybrid 140 HP e-CVT", "E210 makyajlı", "", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "140 hp", "4X2");
+        add("Toyota", "Corolla", 2019, 2022, "1.8 Hybrid 122 HP e-CVT", "E210", "", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "122 hp", "4X2");
+        add("Toyota", "Corolla", 2023, 2025, "1.8 Hybrid 140 HP e-CVT", "E210 makyajlı", "", "Sedan", "Hibrit / Benzin", "CVT / e-CVT", "1.8 L Hybrid", "140 hp", "4X2");
+
         // TOYOTA COROLLA 2026 Türkiye.
         add("Toyota", "Corolla", 2026, 2026, "1.5 Benzin 125 HP Multidrive S • Vision Plus", "E210", "Vision Plus", "Sedan", "Benzin", "CVT / e-CVT", "1.5 L Benzin", "125 hp", "4X2");
         add("Toyota", "Corolla", 2026, 2026, "1.5 Benzin 125 HP Multidrive S • Dream", "E210", "Dream", "Sedan", "Benzin", "CVT / e-CVT", "1.5 L Benzin", "125 hp", "4X2");
@@ -161,6 +170,14 @@ public final class TurkeyVehicleSpecs {
         String engine = "";
         String power = "";
         String drive = "";
+        if (m.contains("corolla") && m.contains("hybrid")) {
+            body = "Sedan";
+            fuel = "Hibrit / Benzin";
+            trans = "CVT / e-CVT";
+            engine = "1.8 L Hybrid";
+            power = year <= 2022 ? "122 hp" : "140 hp";
+            drive = "4X2";
+        }
         if (m.contains("id.") || m.contains("model y") || m.contains("model 3") || m.contains("t10x") || m.contains("t10f") || m.contains("ioniq") || m.contains("leaf") || m.contains("zoe") || m.contains("spring") || m.contains("mg4") || m.contains("atto 3") || m.contains("bz4x") || m.contains("enyaq") || m.contains("eqa") || m.contains("eqb") || m.contains("eqe") || m.contains("eqs")) {
             fuel = "Elektrik";
             trans = "Tek oranlı elektrikli";

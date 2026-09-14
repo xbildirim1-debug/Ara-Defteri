@@ -59,7 +59,6 @@ public final class VehicleCvPdf {
         w.headerTitle = fullVehicleName(vehicle, prefs);
         try {
             drawCover(activity, w, vehicle, prefs, documentNo, showPlate);
-            drawVehicleIdentity(w, vehicle, prefs, phone, note, showPlate, db, showCosts);
             drawHistory(w, db, showCosts);
             drawPhotos(activity, w, selectedPhotos);
             w.finish();
@@ -77,51 +76,71 @@ public final class VehicleCvPdf {
                                   SharedPreferences prefs, String documentNo, boolean showPlate) {
         w.newPage(false);
         w.paint.setColor(Writer.ACCENT_DARK);
-        w.canvas.drawRect(0, 0, Writer.PAGE_W, 96, w.paint);
+        w.canvas.drawRect(0, 0, Writer.PAGE_W, 82, w.paint);
 
-        Bitmap icon = w.appIconBitmap(22);
+        Bitmap icon = w.appIconBitmap(18);
         if (icon != null) {
-            w.canvas.drawBitmap(icon, 38, 20, w.paint);
+            w.canvas.drawBitmap(icon, 38, 17, w.paint);
             icon.recycle();
         }
-        w.text("ARAÇ DEFTERİ", 68, 35, 9.5f, Color.WHITE, true);
-        w.text("Aracının dijital hafızası", 68, 49, 7, 0xFFD8F5EB, false);
-        w.text(fullVehicleName(v, prefs), 38, 77, 15.5f, Color.WHITE, true);
+        w.text("ARAÇ DEFTERİ", 63, 31, 8.4f, Color.WHITE, true);
+        w.text(fullVehicleName(v, prefs), 38, 61, 13.2f, Color.WHITE, true);
 
-        int y = 108;
+        TurkeyVehicleSpecs.Spec spec = resolvedSpec(v, prefs);
+        String body = resolvedValue(prefs, "vehicle_body", spec == null ? "" : spec.body);
+        String trans = resolvedValue(prefs, "vehicle_transmission", spec == null ? "" : spec.transmission);
+        String engine = resolvedValue(prefs, "vehicle_engine", spec == null ? "" : spec.engine);
+        String power = resolvedValue(prefs, "vehicle_power", spec == null ? "" : spec.power);
+        String trim = resolvedValue(prefs, "vehicle_trim", spec == null ? "" : spec.trim);
+        String generation = resolvedValue(prefs, "vehicle_generation", spec == null ? "" : spec.generation);
+        String drivetrain = resolvedValue(prefs, "vehicle_drivetrain", spec == null ? "" : spec.drivetrain);
+        String fuel = v.fuelType == null ? "" : v.fuelType.trim();
+        if (fuel.isEmpty() && spec != null) fuel = spec.fuel;
+
+        int y = 94;
         String mainPhoto = pref(prefs, "vehicle_photo_uri");
         Bitmap photo = mainPhoto.isEmpty() ? null : loadBitmap(activity, Uri.parse(mainPhoto), 1800);
         if (photo != null) {
-            w.drawImageCover(photo, 38, y, 519, 236);
+            w.drawImageCover(photo, 38, y, 519, 190);
             photo.recycle();
-            y += 252;
+            y += 204;
         } else {
             w.paint.setColor(0xFFF0F5F3);
-            w.canvas.drawRoundRect(new RectF(38, y, 557, y + 118), 12, 12, w.paint);
-            w.text("ARAÇ FOTOĞRAFI EKLENMEMİŞ", 58, y + 52, 10, Writer.DARK, true);
-            w.text("Ana araç fotoğrafı burada görünür.", 58, y + 72, 7.5f, Writer.MUTED, false);
-            y += 134;
+            w.canvas.drawRoundRect(new RectF(38, y, 557, y + 90), 10, 10, w.paint);
+            w.text("ARAÇ FOTOĞRAFI EKLENMEMİŞ", 58, y + 39, 9, Writer.DARK, true);
+            w.text("Ana araç fotoğrafı burada görünür.", 58, y + 57, 7, Writer.MUTED, false);
+            y += 104;
         }
 
         String phone = pref(prefs, "cv_phone");
         if (!phone.isEmpty()) {
-            w.text("İletişim: " + phone, 38, y, 8.5f, Writer.ACCENT_DARK, true);
-            y += 17;
+            w.text("İletişim: " + phone, 38, y, 7.8f, Writer.ACCENT_DARK, true);
+            y += 14;
         }
 
-        String body = pref(prefs, "vehicle_body");
-        String trans = pref(prefs, "vehicle_transmission");
+        w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");
+        w.coverChip(307, y + 4, 250, "YAKIT", blankFallback(fuel, "Belirtilmedi"));
+        w.coverChip(38, y + 50, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", engine, power));
+        w.coverChip(307, y + 50, 250, "ŞANZIMAN", trans);
+        w.coverChip(38, y + 96, 250, "KASA / ÇEKİŞ", joinNonEmpty(" • ", body, drivetrain));
+        w.coverChip(307, y + 96, 250, "PAKET / NESİL", joinNonEmpty(" • ", trim, generation));
+        y += 143;
+
         boolean showPrice = prefs.getBoolean("cv_show_price", false);
         String price = pref(prefs, "cv_sale_price");
-        w.coverChip(38, y + 5, 250, "GÜNCEL KM", formatInt(v.km) + " km");
-        w.coverChip(307, y + 5, 250, "YAKIT", blankFallback(v.fuelType, "Belirtilmedi"));
-        w.coverChip(38, y + 55, 250, "KASA / VİTES", joinNonEmpty(" • ", body, trans));
-        if (showPrice && !price.isEmpty())
-            w.coverChip(307, y + 55, 250, "İSTENEN SATIŞ FİYATI", price + " ₺");
-        else
-            w.coverChip(307, y + 55, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", pref(prefs, "vehicle_engine"), pref(prefs, "vehicle_power")));
+        if (showPrice && !price.isEmpty()) {
+            w.coverChip(38, y, 519, "İSTENEN SATIŞ FİYATI", price + " ₺");
+            y += 47;
+        }
 
-        w.text("Bu belge Araç Defteri uygulaması ile kullanıcı kayıtlarından oluşturulmuştur; resmî doğrulama belgesi değildir.", 38, 786, 6.8f, Writer.MUTED, false);
+        String note = pref(prefs, "cv_note");
+        if (!note.isEmpty()) {
+            w.text("AÇIKLAMA", 38, y + 10, 7.2f, Writer.ACCENT_DARK, true);
+            y = w.drawWrapped(note, 38, y + 25, 7.6f, Writer.DARK, false, Writer.CONTENT_W, 10) + 4;
+        }
+
+        w.text("Bu belge kullanıcı tarafından girilen kayıtlardan oluşturulmuştur; resmî doğrulama belgesi değildir.", 38, y + 8, 6.3f, Writer.MUTED, false);
+        w.y = y + 24;
     }
 
     private static void drawVehicleIdentity(Writer w, AppDatabase.Vehicle v, SharedPreferences prefs,
@@ -129,19 +148,20 @@ public final class VehicleCvPdf {
                                             AppDatabase db, boolean showCosts) {
         w.newPage(true);
         w.section("Araç bilgileri", "Teknik ve kayıtlı araç bilgileri");
+        TurkeyVehicleSpecs.Spec spec = resolvedSpec(v, prefs);
 
         w.keyValue("Araç türü", prefOr(prefs, "vehicle_type", "Otomobil"));
         w.keyValue("Marka / Model", v.brand + " / " + v.model);
         w.keyValue("Model yılı", String.valueOf(v.year));
-        w.keyValue("Motor / Paket / Versiyon", pref(prefs, "vehicle_catalog_variant"));
-        w.keyValue("Nesil / Seri", pref(prefs, "vehicle_generation"));
-        w.keyValue("Paket / Versiyon", pref(prefs, "vehicle_trim"));
-        w.keyValue("Kasa tipi", pref(prefs, "vehicle_body"));
-        w.keyValue("Yakıt", v.fuelType);
-        w.keyValue("Şanzıman", pref(prefs, "vehicle_transmission"));
-        w.keyValue("Motor", pref(prefs, "vehicle_engine"));
-        w.keyValue("Motor gücü", pref(prefs, "vehicle_power"));
-        w.keyValue("Çekiş", pref(prefs, "vehicle_drivetrain"));
+        w.keyValue("Motor / Paket / Versiyon", resolvedValue(prefs, "vehicle_catalog_variant", spec == null ? "" : spec.variant));
+        w.keyValue("Nesil / Seri", resolvedValue(prefs, "vehicle_generation", spec == null ? "" : spec.generation));
+        w.keyValue("Paket / Versiyon", resolvedValue(prefs, "vehicle_trim", spec == null ? "" : spec.trim));
+        w.keyValue("Kasa tipi", resolvedValue(prefs, "vehicle_body", spec == null ? "" : spec.body));
+        w.keyValue("Yakıt", blankFallback(v.fuelType, spec == null ? "" : spec.fuel));
+        w.keyValue("Şanzıman", resolvedValue(prefs, "vehicle_transmission", spec == null ? "" : spec.transmission));
+        w.keyValue("Motor", resolvedValue(prefs, "vehicle_engine", spec == null ? "" : spec.engine));
+        w.keyValue("Motor gücü", resolvedValue(prefs, "vehicle_power", spec == null ? "" : spec.power));
+        w.keyValue("Çekiş", resolvedValue(prefs, "vehicle_drivetrain", spec == null ? "" : spec.drivetrain));
         w.keyValue("Renk", pref(prefs, "vehicle_color"));
         w.keyValue("Güncel kilometre", formatInt(v.km) + " km");
 
@@ -278,11 +298,36 @@ public final class VehicleCvPdf {
         return b.toString();
     }
 
-    private static String fullVehicleName(AppDatabase.Vehicle v, SharedPreferences prefs) {
+    private static TurkeyVehicleSpecs.Spec resolvedSpec(AppDatabase.Vehicle v, SharedPreferences prefs) {
         String variant = pref(prefs, "vehicle_catalog_variant");
-        if (variant.isEmpty()) {
-            variant = joinNonEmpty(" ", pref(prefs, "vehicle_engine"), pref(prefs, "vehicle_trim"), pref(prefs, "vehicle_transmission"));
+        TurkeyVehicleSpecs.Spec exact = TurkeyVehicleSpecs.find(v.brand, v.model, v.year, variant);
+        if (exact != null) return exact;
+        List<TurkeyVehicleSpecs.Spec> specs = TurkeyVehicleSpecs.specsFor(v.brand, v.model, v.year);
+        if (!specs.isEmpty()) {
+            String fuelHint = v.fuelType == null ? "" : v.fuelType.toLowerCase(new Locale("tr", "TR"));
+            for (TurkeyVehicleSpecs.Spec candidate : specs) {
+                String cf = candidate.fuel == null ? "" : candidate.fuel.toLowerCase(new Locale("tr", "TR"));
+                if (fuelHint.contains("hibrit") && cf.contains("hibrit")) return candidate;
+                if (fuelHint.contains("dizel") && cf.contains("dizel")) return candidate;
+                if (fuelHint.equals("benzin") && cf.equals("benzin")) return candidate;
+                if (fuelHint.contains("elektrik") && cf.contains("elektrik")) return candidate;
+            }
+            return specs.get(0);
         }
+        return TurkeyVehicleSpecs.inferred(prefOr(prefs, "vehicle_type", "Otomobil"), v.brand, v.model, v.year);
+    }
+
+    private static String resolvedValue(SharedPreferences prefs, String key, String fallback) {
+        String value = pref(prefs, key);
+        if (!value.isEmpty() && !"Belirtilmedi".equalsIgnoreCase(value)) return value;
+        return fallback == null || fallback.trim().isEmpty() ? "Belirtilmedi" : fallback.trim();
+    }
+
+    private static String fullVehicleName(AppDatabase.Vehicle v, SharedPreferences prefs) {
+        TurkeyVehicleSpecs.Spec spec = resolvedSpec(v, prefs);
+        String variant = pref(prefs, "vehicle_catalog_variant");
+        if (variant.startsWith("Teknik bilgiyi")) variant = "";
+        if (variant.isEmpty() && spec != null && !spec.variant.isEmpty() && !"Otomatik temel bilgi".equals(spec.variant)) variant = spec.variant;
         return joinNonEmpty(" ", String.valueOf(v.year), v.brand, v.model, variant);
     }
 
@@ -453,11 +498,11 @@ public final class VehicleCvPdf {
 
         void coverChip(int x, int yy, int w, String label, String value) {
             paint.setColor(0xFFF1F6F4);
-            canvas.drawRoundRect(new RectF(x, yy, x + w, yy + 42), 9, 9, paint);
-            text(label, x + 10, yy + 14, 6f, MUTED, true);
+            canvas.drawRoundRect(new RectF(x, yy, x + w, yy + 38), 9, 9, paint);
+            text(label, x + 10, yy + 13, 5.8f, MUTED, true);
             String v = value == null || value.trim().isEmpty() ? "Belirtilmedi" : value;
             if (v.length() > 31) v = v.substring(0, 30) + "…";
-            text(v, x + 10, yy + 31, 8.8f, DARK, true);
+            text(v, x + 10, yy + 28, 8.2f, DARK, true);
         }
 
         void infoBox(String label, String value) {
