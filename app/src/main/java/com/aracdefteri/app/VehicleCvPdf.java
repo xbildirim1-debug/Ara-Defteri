@@ -114,9 +114,19 @@ public final class VehicleCvPdf {
         }
 
         String phone = pref(prefs, "cv_phone");
-        if (!phone.isEmpty()) {
-            w.text("İletişim: " + phone, 38, y, 7.8f, Writer.ACCENT_DARK, true);
-            y += 14;
+        boolean showPrice = prefs.getBoolean("cv_show_price", false);
+        String price = pref(prefs, "cv_sale_price");
+        boolean hasPrice = showPrice && !price.isEmpty();
+        if (!phone.isEmpty() && hasPrice) {
+            w.coverChip(38, y, 250, "İLETİŞİM", phone);
+            w.coverChip(307, y, 250, "İSTENEN SATIŞ FİYATI", price + " ₺");
+            y += 46;
+        } else if (!phone.isEmpty()) {
+            w.coverChip(38, y, 519, "İLETİŞİM", phone);
+            y += 46;
+        } else if (hasPrice) {
+            w.coverChip(38, y, 519, "İSTENEN SATIŞ FİYATI", price + " ₺");
+            y += 46;
         }
 
         w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");
@@ -128,13 +138,6 @@ public final class VehicleCvPdf {
         w.coverChip(38, y + 142, 250, "PAKET / VERSİYON", blankFallback(trim, "Belirtilmedi"));
         w.coverChip(307, y + 142, 250, "NESİL / SERİ", blankFallback(generation, "Belirtilmedi"));
         y += 189;
-
-        boolean showPrice = prefs.getBoolean("cv_show_price", false);
-        String price = pref(prefs, "cv_sale_price");
-        if (showPrice && !price.isEmpty()) {
-            w.coverChip(38, y, 519, "İSTENEN SATIŞ FİYATI", price + " ₺");
-            y += 47;
-        }
 
         String note = pref(prefs, "cv_note");
         if (!note.isEmpty()) {
@@ -202,22 +205,26 @@ public final class VehicleCvPdf {
         }
         if (photos.isEmpty()) return;
 
-        int index = 0;
-        while (index < photos.size()) {
-            w.newPage(true);
-            w.section("Araç Resimleri", "CV için seçilen araç fotoğrafları");
-            for (int slot = 0; slot < 3 && index < photos.size(); slot++, index++) {
-                Bitmap bitmap = loadBitmap(activity, photos.get(index), 1600);
-                if (bitmap == null) {
-                    w.simpleCard("Araç resmi " + (index + 1), "Fotoğraf okunamadı", "");
-                    continue;
-                }
-                w.ensure(215);
-                w.label("ARAÇ RESMİ " + (index + 1) + " / " + photos.size());
-                w.drawImageFit(bitmap, Writer.LEFT, w.y + 5, Writer.CONTENT_W, 184);
-                w.y += 202;
-                bitmap.recycle();
+        // Geçmiş kayıtlarından sonra sayfada yer varsa fotoğrafları aynı sayfada sürdür.
+        // Böylece yarım dolu sayfa bırakıp gereksiz yeni sayfa açılmaz.
+        if (w.y + 195 > 790) w.newPage(true);
+        w.y += 4;
+        w.section("Araç Resimleri", null);
+
+        for (int index = 0; index < photos.size(); index++) {
+            if (w.y + 174 > 790) {
+                w.newPage(true);
+                w.section("Araç Resimleri", null);
             }
+            Bitmap bitmap = loadBitmap(activity, photos.get(index), 1600);
+            if (bitmap == null) {
+                w.simpleCard("Araç resmi " + (index + 1), "Fotoğraf okunamadı", "");
+                continue;
+            }
+            w.label("ARAÇ RESMİ " + (index + 1) + " / " + photos.size());
+            w.drawImageFit(bitmap, Writer.LEFT, w.y + 3, Writer.CONTENT_W, 150);
+            w.y += 163;
+            bitmap.recycle();
         }
     }
 
