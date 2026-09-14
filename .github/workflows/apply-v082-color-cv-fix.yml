@@ -1,0 +1,140 @@
+name: Apply Araç Defteri v0.8.2 vehicle color CV fix
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/apply-v082-color-cv-fix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.8.2 color fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # CV oluşturma ekranına araç rengini görünür ve düzenlenebilir ekle.
+          p = Path('app/src/main/java/com/aracdefteri/app/NextMainActivity.java')
+          s = p.read_text()
+          old = '''        EditText phone = formField(options, "Telefon (isteğe bağlı)", prefs.getString("cv_phone", ""), InputType.TYPE_CLASS_PHONE);
+        EditText note = formMultiline(options, "Açıklama (isteğe bağlı)", prefs.getString("cv_note", ""));
+'''
+          new = '''        EditText color = formField(options, "Araç rengi", prefs.getString("vehicle_color", ""), InputType.TYPE_CLASS_TEXT);
+        color.setHint("Örn: Beyaz, İnci Beyazı, Metalik Gri");
+        EditText phone = formField(options, "Telefon (isteğe bağlı)", prefs.getString("cv_phone", ""), InputType.TYPE_CLASS_PHONE);
+        EditText note = formMultiline(options, "Açıklama (isteğe bağlı)", prefs.getString("cv_note", ""));
+'''
+          assert old in s, 'CV phone/note bloğu bulunamadı'
+          s = s.replace(old, new, 1)
+
+          old = '''                    .putString("cv_sale_price", salePrice.getText().toString().trim())
+                    .putString("cv_phone", phone.getText().toString().trim())
+                    .putString("cv_note", note.getText().toString().trim())
+'''
+          new = '''                    .putString("cv_sale_price", salePrice.getText().toString().trim())
+                    .putString("vehicle_color", color.getText().toString().trim())
+                    .putString("cv_phone", phone.getText().toString().trim())
+                    .putString("cv_note", note.getText().toString().trim())
+'''
+          assert old in s, 'CV prefs bloğu bulunamadı'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # PDF kapağında rengi ve bütün temel teknik alanları kompakt biçimde göster.
+          p = Path('app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java')
+          s = p.read_text()
+          old = '''        String drivetrain = resolvedValue(prefs, "vehicle_drivetrain", spec == null ? "" : spec.drivetrain);
+        String fuel = v.fuelType == null ? "" : v.fuelType.trim();
+'''
+          new = '''        String drivetrain = resolvedValue(prefs, "vehicle_drivetrain", spec == null ? "" : spec.drivetrain);
+        String color = pref(prefs, "vehicle_color");
+        String fuel = v.fuelType == null ? "" : v.fuelType.trim();
+'''
+          assert old in s, 'PDF color insertion point bulunamadı'
+          s = s.replace(old, new, 1)
+
+          old = '''        w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");
+        w.coverChip(307, y + 4, 250, "YAKIT", blankFallback(fuel, "Belirtilmedi"));
+        w.coverChip(38, y + 50, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", engine, power));
+        w.coverChip(307, y + 50, 250, "ŞANZIMAN", trans);
+        w.coverChip(38, y + 96, 250, "KASA / ÇEKİŞ", joinNonEmpty(" • ", body, drivetrain));
+        w.coverChip(307, y + 96, 250, "PAKET / NESİL", joinNonEmpty(" • ", trim, generation));
+        y += 143;
+'''
+          new = '''        w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");
+        w.coverChip(307, y + 4, 250, "YAKIT", blankFallback(fuel, "Belirtilmedi"));
+        w.coverChip(38, y + 50, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", engine, power));
+        w.coverChip(307, y + 50, 250, "ŞANZIMAN", blankFallback(trans, "Belirtilmedi"));
+        w.coverChip(38, y + 96, 250, "KASA / RENK", joinNonEmpty(" • ", body, color));
+        w.coverChip(307, y + 96, 250, "ÇEKİŞ", blankFallback(drivetrain, "Belirtilmedi"));
+        w.coverChip(38, y + 142, 250, "PAKET / VERSİYON", blankFallback(trim, "Belirtilmedi"));
+        w.coverChip(307, y + 142, 250, "NESİL / SERİ", blankFallback(generation, "Belirtilmedi"));
+        y += 189;
+'''
+          assert old in s, 'PDF teknik chip bloğu bulunamadı'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Sürüm yükselt.
+          p = Path('app/build.gradle')
+          s = p.read_text()
+          s = s.replace('versionCode 9', 'versionCode 10')
+          s = s.replace("versionName '0.8.1-pdf-spec-fix-dev'", "versionName '0.8.2-color-cv-fix-dev'")
+          p.write_text(s)
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Commit source changes
+        run: |
+          git config user.name "Araç Defteri Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java app/build.gradle
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "Show vehicle color in CV creation and PDF"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Prepare APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk "Arac-Defteri-v0.8.2-color-cv-fix-dev.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arac-Defteri-v0.8.2-color-cv-fix-dev
+          path: Arac-Defteri-v0.8.2-color-cv-fix-dev.apk
