@@ -804,6 +804,8 @@ private void renderCv(LinearLayout content) {
             salePrice.setAlpha(isChecked ? 1f : 0.45f);
         });
 
+        EditText color = formField(options, "Araç rengi", prefs.getString("vehicle_color", ""), InputType.TYPE_CLASS_TEXT);
+        color.setHint("Örn: Beyaz, İnci Beyazı, Metalik Gri");
         EditText phone = formField(options, "Telefon (isteğe bağlı)", prefs.getString("cv_phone", ""), InputType.TYPE_CLASS_PHONE);
         EditText note = formMultiline(options, "Açıklama (isteğe bağlı)", prefs.getString("cv_note", ""));
         content.addView(options);
@@ -820,6 +822,7 @@ private void renderCv(LinearLayout content) {
                     .putBoolean("cv_show_costs", showCosts.isChecked())
                     .putBoolean("cv_show_price", showPrice.isChecked())
                     .putString("cv_sale_price", salePrice.getText().toString().trim())
+                    .putString("vehicle_color", color.getText().toString().trim())
                     .putString("cv_phone", phone.getText().toString().trim())
                     .putString("cv_note", note.getText().toString().trim())
                     .apply();

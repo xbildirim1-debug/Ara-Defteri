@@ -94,6 +94,7 @@ public final class VehicleCvPdf {
         String trim = resolvedValue(prefs, "vehicle_trim", spec == null ? "" : spec.trim);
         String generation = resolvedValue(prefs, "vehicle_generation", spec == null ? "" : spec.generation);
         String drivetrain = resolvedValue(prefs, "vehicle_drivetrain", spec == null ? "" : spec.drivetrain);
+        String color = pref(prefs, "vehicle_color");
         String fuel = v.fuelType == null ? "" : v.fuelType.trim();
         if (fuel.isEmpty() && spec != null) fuel = spec.fuel;
 
@@ -121,10 +122,12 @@ public final class VehicleCvPdf {
         w.coverChip(38, y + 4, 250, "GÜNCEL KM", formatInt(v.km) + " km");
         w.coverChip(307, y + 4, 250, "YAKIT", blankFallback(fuel, "Belirtilmedi"));
         w.coverChip(38, y + 50, 250, "MOTOR / GÜÇ", joinNonEmpty(" • ", engine, power));
-        w.coverChip(307, y + 50, 250, "ŞANZIMAN", trans);
-        w.coverChip(38, y + 96, 250, "KASA / ÇEKİŞ", joinNonEmpty(" • ", body, drivetrain));
-        w.coverChip(307, y + 96, 250, "PAKET / NESİL", joinNonEmpty(" • ", trim, generation));
-        y += 143;
+        w.coverChip(307, y + 50, 250, "ŞANZIMAN", blankFallback(trans, "Belirtilmedi"));
+        w.coverChip(38, y + 96, 250, "KASA / RENK", joinNonEmpty(" • ", body, color));
+        w.coverChip(307, y + 96, 250, "ÇEKİŞ", blankFallback(drivetrain, "Belirtilmedi"));
+        w.coverChip(38, y + 142, 250, "PAKET / VERSİYON", blankFallback(trim, "Belirtilmedi"));
+        w.coverChip(307, y + 142, 250, "NESİL / SERİ", blankFallback(generation, "Belirtilmedi"));
+        y += 189;
 
         boolean showPrice = prefs.getBoolean("cv_show_price", false);
         String price = pref(prefs, "cv_sale_price");
