@@ -10,8 +10,8 @@ android {
         applicationId 'com.aracdefteri.app'
         minSdk 26
         targetSdk 35
-        versionCode 11
-        versionName '0.8.3-cv-layout-fix-dev'
+        versionCode 12
+        versionName '0.9.0-damage-photos-dev'
     }
 
     buildTypes {

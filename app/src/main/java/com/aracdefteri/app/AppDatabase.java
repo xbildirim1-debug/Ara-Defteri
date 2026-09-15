@@ -14,7 +14,7 @@ import java.util.Locale;
 
 public class AppDatabase extends SQLiteOpenHelper {
     private static final String DB_NAME = "arac_defteri.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     public static class Vehicle {
         public int id, year, km;
@@ -40,6 +40,11 @@ public class AppDatabase extends SQLiteOpenHelper {
         public String uri = "", date = "";
     }
 
+    public static class RecordPhoto {
+        public long id, recordId;
+        public String uri = "", date = "";
+    }
+
     public AppDatabase(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
     }
@@ -50,6 +55,8 @@ public class AppDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE records (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, title TEXT, date TEXT, km INTEGER, cost REAL, detail TEXT, next_date TEXT, next_km INTEGER, attachment TEXT, subtype TEXT DEFAULT '', quantity REAL DEFAULT 0, unit TEXT DEFAULT '', unit_price REAL DEFAULT 0, status TEXT DEFAULT '', extra TEXT DEFAULT '')");
         db.execSQL("CREATE TABLE expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, date TEXT, amount REAL, note TEXT)");
         db.execSQL("CREATE TABLE photos (id INTEGER PRIMARY KEY AUTOINCREMENT, uri TEXT, date TEXT)");
+        db.execSQL("CREATE TABLE record_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL, uri TEXT NOT NULL, date TEXT DEFAULT '')");
+        db.execSQL("CREATE INDEX idx_record_photos_record_id ON record_photos(record_id)");
     }
 
     @Override
@@ -62,6 +69,10 @@ public class AppDatabase extends SQLiteOpenHelper {
             addColumn(db, "records", "unit_price", "REAL DEFAULT 0");
             addColumn(db, "records", "status", "TEXT DEFAULT ''");
             addColumn(db, "records", "extra", "TEXT DEFAULT ''");
+        }
+        if (oldVersion < 3) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS record_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL, uri TEXT NOT NULL, date TEXT DEFAULT '')");
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_record_photos_record_id ON record_photos(record_id)");
         }
     }
 
@@ -159,7 +170,9 @@ public class AppDatabase extends SQLiteOpenHelper {
     }
 
     public void deleteRecord(long id) {
-        getWritableDatabase().delete("records", "id=?", new String[]{String.valueOf(id)});
+        SQLiteDatabase w = getWritableDatabase();
+        w.delete("record_photos", "record_id=?", new String[]{String.valueOf(id)});
+        w.delete("records", "id=?", new String[]{String.valueOf(id)});
     }
 
     public void setRecordAttachment(long id, String uri) {
@@ -249,6 +262,32 @@ public class AppDatabase extends SQLiteOpenHelper {
         List<Photo> out = new ArrayList<>();
         Cursor c = getReadableDatabase().rawQuery("SELECT id,uri,date FROM photos ORDER BY id DESC", null);
         while(c.moveToNext()) { Photo p=new Photo(); p.id=c.getLong(0); p.uri=nz(c.getString(1)); p.date=nz(c.getString(2)); out.add(p); }
+        c.close(); return out;
+    }
+
+    public long addRecordPhoto(long recordId, String uri, String date) {
+        ContentValues v = new ContentValues();
+        v.put("record_id", recordId); v.put("uri", uri); v.put("date", date);
+        return getWritableDatabase().insert("record_photos", null, v);
+    }
+
+    public void deleteRecordPhoto(long id) {
+        getWritableDatabase().delete("record_photos", "id=?", new String[]{String.valueOf(id)});
+    }
+
+    public int countRecordPhotos(long recordId) {
+        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM record_photos WHERE record_id=?", new String[]{String.valueOf(recordId)});
+        c.moveToFirst(); int n = c.getInt(0); c.close(); return n;
+    }
+
+    public List<RecordPhoto> getRecordPhotos(long recordId) {
+        List<RecordPhoto> out = new ArrayList<>();
+        Cursor c = getReadableDatabase().rawQuery("SELECT id,record_id,uri,date FROM record_photos WHERE record_id=? ORDER BY id ASC", new String[]{String.valueOf(recordId)});
+        while (c.moveToNext()) {
+            RecordPhoto photo = new RecordPhoto();
+            photo.id = c.getLong(0); photo.recordId = c.getLong(1); photo.uri = nz(c.getString(2)); photo.date = nz(c.getString(3));
+            out.add(photo);
+        }
         c.close(); return out;
     }
 

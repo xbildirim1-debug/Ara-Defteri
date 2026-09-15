@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
-/** Modern, markalı ve güvenli Araç Defteri CV PDF üreticisi. */
+/** Taşıtım araç geçmişi / CV PDF üreticisi. */
 public final class VehicleCvPdf {
     private VehicleCvPdf() {}
 
@@ -59,11 +59,11 @@ public final class VehicleCvPdf {
         w.headerTitle = fullVehicleName(vehicle, prefs);
         try {
             drawCover(activity, w, vehicle, prefs, documentNo, showPlate);
-            drawHistory(w, db, showCosts);
+            drawHistory(activity, w, db, showCosts);
             drawPhotos(activity, w, selectedPhotos);
             w.finish();
 
-            String fileName = "Arac-Defteri-CV-" + documentNo.replace("-", "") + ".pdf";
+            String fileName = "Tasitim-CV-" + documentNo.replace("-", "") + ".pdf";
             Uri uri = writeDocument(activity, document, fileName);
             prefs.edit().putString("cv_last_document_no", documentNo).apply();
             return new Result(uri, documentNo);
@@ -83,7 +83,7 @@ public final class VehicleCvPdf {
             w.canvas.drawBitmap(icon, 38, 17, w.paint);
             icon.recycle();
         }
-        w.text("ARAÇ DEFTERİ", 63, 31, 8.4f, Color.WHITE, true);
+        w.text("TAŞITIM", 63, 31, 8.4f, Color.WHITE, true);
         w.text(fullVehicleName(v, prefs), 38, 61, 13.2f, Color.WHITE, true);
 
         TurkeyVehicleSpecs.Spec spec = resolvedSpec(v, prefs);
@@ -180,7 +180,7 @@ public final class VehicleCvPdf {
         }
     }
 
-    private static void drawHistory(Writer w, AppDatabase db, boolean showCosts) {
+    private static void drawHistory(Activity activity, Writer w, AppDatabase db, boolean showCosts) {
         List<AppDatabase.Record> all = db.getRecords(500);
         String[] types = {"Bakım", "Hasar", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};
         String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
@@ -190,8 +190,32 @@ public final class VehicleCvPdf {
             w.ensure(70);
             w.y += 3;
             w.section(titles[i], null);
-            for (AppDatabase.Record r : group) w.recordCard(r, showCosts);
+            for (AppDatabase.Record r : group) {
+                w.recordCard(r, showCosts);
+                if ("Hasar".equals(r.type)) drawDamagePhotos(activity, w, db.getRecordPhotos(r.id));
+            }
         }
+    }
+
+    private static void drawDamagePhotos(Activity activity, Writer w, List<AppDatabase.RecordPhoto> photos) {
+        if (photos == null || photos.isEmpty()) return;
+        w.ensure(28);
+        w.label("HASAR FOTOĞRAFLARI • " + photos.size());
+        final int gap = 9;
+        final int cellW = (Writer.CONTENT_W - gap) / 2;
+        final int cellH = 105;
+        for (int i = 0; i < photos.size(); i += 2) {
+            w.ensure(cellH + 10);
+            for (int col = 0; col < 2 && i + col < photos.size(); col++) {
+                Bitmap bitmap = loadBitmap(activity, Uri.parse(photos.get(i + col).uri), 1200);
+                if (bitmap == null) continue;
+                int x = Writer.LEFT + col * (cellW + gap);
+                w.drawImageFit(bitmap, x, w.y, cellW, cellH);
+                bitmap.recycle();
+            }
+            w.y += cellH + 9;
+        }
+        w.y += 2;
     }
 
     private static void drawPhotos(Activity activity, Writer w, List<Uri> selectedPhotos) {
@@ -233,7 +257,7 @@ public final class VehicleCvPdf {
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
             values.put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf");
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AracDefteri");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Tasitim");
             Uri uri = activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
             if (uri == null) throw new Exception("PDF dosyası oluşturulamadı");
             try (OutputStream out = activity.getContentResolver().openOutputStream(uri)) {
@@ -399,7 +423,7 @@ public final class VehicleCvPdf {
                 canvas.drawBitmap(icon, LEFT, 22, paint);
                 icon.recycle();
             }
-            text("ARAÇ DEFTERİ", LEFT + 23, 34, 7.8f, ACCENT, true);
+            text("TAŞITIM", LEFT + 23, 34, 7.8f, ACCENT, true);
             String h = headerTitle == null ? "" : headerTitle;
             if (h.length() > 48) h = h.substring(0, 47) + "…";
             text(h, LEFT + 168, 34, 7.2f, DARK, true);
@@ -423,7 +447,7 @@ public final class VehicleCvPdf {
         void drawFooter() {
             paint.setColor(0xFFE6ECEA);
             canvas.drawRect(LEFT, 801, RIGHT, 802, paint);
-            text("Araç Defteri • Belge No: " + documentNo, LEFT, 820, 6.5f, MUTED, false);
+            text("Taşıtım • Belge No: " + documentNo, LEFT, 820, 6.5f, MUTED, false);
             text("Sayfa " + pageNo, RIGHT - 34, 820, 6.5f, MUTED, false);
         }
 

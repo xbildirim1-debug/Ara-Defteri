@@ -61,6 +61,7 @@ public class NextMainActivity extends Activity {
     private static final int PICK_RECORD_ATTACHMENT = 3102;
     private static final int PICK_VEHICLE_IMAGE = 3103;
     private static final int PICK_CV_IMAGES = 3104;
+    private static final int PICK_DAMAGE_IMAGES = 3105;
 
     private AppDatabase db;
     private SharedPreferences prefs;
@@ -69,6 +70,7 @@ public class NextMainActivity extends Activity {
     private String currentModule = null;
     private long selectedRecordId = -1;
     private long pendingAttachmentRecordId = -1;
+    private long pendingDamagePhotoRecordId = -1;
     private boolean dark;
     private final ArrayList<Uri> cvPhotoUris = new ArrayList<>();
     private TextView cvPhotoCountView;
@@ -214,7 +216,7 @@ private void renderPage(int page) {
     }
 
     private void renderHome(LinearLayout content) {
-        addHeader(content, "Araç Defteri", "Aracının dijital hafızası");
+        addHeader(content, "Taşıtım", "Taşıtının dijital hafızası");
         AppDatabase.Vehicle vehicle = db.getVehicle();
         content.addView(vehicleHero(vehicle));
         gap(content, 20);
@@ -425,6 +427,11 @@ private void renderPage(int page) {
         content.addView(hero);
         gap(content, 14);
 
+        if ("Hasar".equals(r.type)) {
+            renderDamagePhotos(content, r);
+            gap(content, 14);
+        }
+
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button edit = secondaryButton("Düzenle");
@@ -442,6 +449,61 @@ private void renderPage(int page) {
         Button delete = dangerButton("Kaydı sil");
         delete.setOnClickListener(v -> confirmDeleteRecord(r));
         content.addView(delete, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+    }
+
+    private void renderDamagePhotos(LinearLayout content, AppDatabase.Record record) {
+        List<AppDatabase.RecordPhoto> photos = db.getRecordPhotos(record.id);
+        sectionTitle(content, "Hasar fotoğrafları", "Kaza / hasar öncesi ve sonrası fotoğrafları • en fazla 10");
+
+        if (!photos.isEmpty()) {
+            android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(this);
+            scroll.setHorizontalScrollBarEnabled(false);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (AppDatabase.RecordPhoto photo : photos) row.addView(damagePhotoThumb(record.id, photo));
+            scroll.addView(row);
+            content.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(106)));
+            gap(content, 9);
+        } else {
+            content.addView(infoCard("Henüz hasar fotoğrafı yok", "Fotoğrafları bu hasar kaydına bağlayabilirsin. Araç CV'de de hasarla birlikte görünür.", moduleColor("Hasar")));
+            gap(content, 9);
+        }
+
+        Button add = secondaryButton(photos.size() >= 10 ? "10 fotoğraf sınırına ulaşıldı" : "+ Hasar fotoğrafı ekle (" + photos.size() + "/10)");
+        add.setEnabled(photos.size() < 10);
+        add.setOnClickListener(v -> pickDamageImages(record.id));
+        content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
+    }
+
+    private View damagePhotoThumb(long recordId, AppDatabase.RecordPhoto photo) {
+        FrameLayout frame = new FrameLayout(this);
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(dp(112), dp(98));
+        fp.setMargins(0, 0, dp(9), 0);
+        frame.setLayoutParams(fp);
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setBackground(cardDrawable(surface2, dp(13), stroke));
+        try { image.setImageURI(Uri.parse(photo.uri)); } catch (Exception ignored) { }
+        image.setOnClickListener(v -> openAttachment(photo.uri));
+        frame.addView(image, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        TextView remove = tv("×", Color.WHITE, 18, true);
+        remove.setGravity(Gravity.CENTER);
+        remove.setBackground(cardDrawable(Color.argb(220, 28, 35, 35), dp(14), Color.TRANSPARENT));
+        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(dp(29), dp(29));
+        rp.gravity = Gravity.TOP | Gravity.RIGHT;
+        rp.setMargins(0, dp(5), dp(5), 0);
+        frame.addView(remove, rp);
+        remove.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Fotoğraf silinsin mi?")
+                .setMessage("Fotoğraf bu hasar kaydından kaldırılacak.")
+                .setNegativeButton("Vazgeç", null)
+                .setPositiveButton("Sil", (d, w) -> {
+                    db.deleteRecordPhoto(photo.id);
+                    openRecordDetail(recordId);
+                }).show());
+        return frame;
     }
 
     private static class FormRefs {
@@ -1550,6 +1612,18 @@ private void openVehicleForm() {
         startActivityForResult(Intent.createChooser(i, "CV için fotoğraf seç"), PICK_CV_IMAGES);
     }
 
+    private void pickDamageImages(long recordId) {
+        int current = db.countRecordPhotos(recordId);
+        if (current >= 10) { toast("Bir hasar kaydına en fazla 10 fotoğraf ekleyebilirsin"); return; }
+        pendingDamagePhotoRecordId = recordId;
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(Intent.createChooser(i, "Hasar fotoğraflarını seç"), PICK_DAMAGE_IMAGES);
+    }
+
     private void pickRecordAttachment(long id) {
         pendingAttachmentRecordId=id;
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -1580,6 +1654,33 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
             if (added > 0) toast(added + " araç resmi eklendi");
             else if (cvPhotoUris.isEmpty()) toast("Fotoğraf seçilemedi");
             renderPage(2);
+            return;
+        }
+
+        if (requestCode == PICK_DAMAGE_IMAGES && pendingDamagePhotoRecordId >= 0) {
+            long recordId = pendingDamagePhotoRecordId;
+            pendingDamagePhotoRecordId = -1;
+            int available = Math.max(0, 10 - db.countRecordPhotos(recordId));
+            int added = 0;
+            int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            android.content.ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount() && added < available; i++) {
+                    Uri u = clip.getItemAt(i).getUri();
+                    if (u == null) continue;
+                    try { getContentResolver().takePersistableUriPermission(u, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) { }
+                    db.addRecordPhoto(recordId, u.toString(), today());
+                    added++;
+                }
+                if (clip.getItemCount() > available) toast("İlk " + available + " fotoğraf eklendi; sınır 10");
+            } else if (data.getData() != null && available > 0) {
+                Uri u = data.getData();
+                try { getContentResolver().takePersistableUriPermission(u, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) { }
+                db.addRecordPhoto(recordId, u.toString(), today());
+                added = 1;
+            }
+            if (added > 0) toast(added + " hasar fotoğrafı eklendi");
+            openRecordDetail(recordId);
             return;
         }
 
