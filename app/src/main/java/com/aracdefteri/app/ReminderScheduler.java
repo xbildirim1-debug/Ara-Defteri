@@ -1,125 +1,49 @@
 package com.aracdefteri.app;
 
-import android.app.AlarmManager;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
-
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Locale;
+import android.app.*;
+import android.content.*;
+import android.database.Cursor;
+import java.time.*;
+import java.util.*;
 
 public final class ReminderScheduler {
-    private ReminderScheduler() {}
-
-    public static void ensureChannel(Context context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        NotificationChannel channel = new NotificationChannel(
-                ReminderReceiver.CHANNEL_ID,
-                "Araç hatırlatmaları",
-                NotificationManager.IMPORTANCE_HIGH
-        );
-        channel.setDescription("Bakım, sigorta, muayene, vergi ve diğer araç hatırlatmaları");
-        channel.enableVibration(true);
-        manager.createNotificationChannel(channel);
+    private ReminderScheduler(){}
+    public static void ensureChannel(Context c){
+        NotificationChannel ch=new NotificationChannel(ReminderReceiver.CHANNEL_ID,"Araç hatırlatmaları",NotificationManager.IMPORTANCE_HIGH);
+        ch.setDescription("Bakım, muayene, MTV ve poliçe hatırlatmaları");c.getSystemService(NotificationManager.class).createNotificationChannel(ch);
     }
-
-    public static void schedule(Context context, long recordId, String title, String dateText) {
-        cancel(context, recordId);
-        if (dateText == null || dateText.trim().isEmpty()) return;
-        try {
-            Date parsed = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).parse(dateText.trim());
-            if (parsed == null) return;
-
-            Calendar due = Calendar.getInstance();
-            due.setTime(parsed);
-            due.set(Calendar.HOUR_OF_DAY, 9);
-            due.set(Calendar.MINUTE, 0);
-            due.set(Calendar.SECOND, 0);
-            due.set(Calendar.MILLISECOND, 0);
-
-            scheduleOne(context, recordId, title, due, 7);
-            scheduleOne(context, recordId, title, due, 1);
-
-            long dayDiff = calendarDayDiff(Calendar.getInstance(), due);
-            if (dayDiff >= 0 && dayDiff <= 7) {
-                String message;
-                if (dayDiff == 0) message = "Bugün zamanı geldi. Araç Defteri kaydını kontrol et.";
-                else if (dayDiff == 1) message = "Yarın zamanı geliyor. Araç Defteri kaydını kontrol et.";
-                else message = dayDiff + " gün kaldı. Araç Defteri kaydını kontrol et.";
-                notifyNow(context, title + " yaklaşıyor", message, (int)(recordId % Integer.MAX_VALUE));
-            }
-        } catch (Exception ignored) { }
-    }
-
-    private static void scheduleOne(Context context, long recordId, String title, Calendar due, int daysBefore) {
-        Calendar trigger = (Calendar) due.clone();
-        trigger.add(Calendar.DAY_OF_YEAR, -daysBefore);
-        if (trigger.getTimeInMillis() <= System.currentTimeMillis()) return;
-
-        Intent intent = new Intent(context, ReminderReceiver.class);
-        intent.putExtra("title", title + " yaklaşıyor");
-        intent.putExtra("text", daysBefore + " gün kaldı. Araç Defteri kaydını kontrol et.");
-        int requestCode = requestCode(recordId, daysBefore);
-        PendingIntent pending = PendingIntent.getBroadcast(
-                context,
-                requestCode,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-        AlarmManager alarm = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger.getTimeInMillis(), pending);
-        } else {
-            alarm.set(AlarmManager.RTC_WAKEUP, trigger.getTimeInMillis(), pending);
+    public static void schedule(Context c,long id,String title,String value){
+        cancel(c,id);LocalDate date=RecordRules.date(value);if(date==null)return;
+        for(int before:new int[]{7,1}){
+            long at=date.minusDays(before).atTime(9,0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();if(at<=System.currentTimeMillis())continue;
+            Intent i=new Intent(c,ReminderReceiver.class).putExtra("record_id",id).putExtra("days",before);
+            PendingIntent p=PendingIntent.getBroadcast(c,code(id,before),i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+            c.getSystemService(AlarmManager.class).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,at,p);
         }
     }
-
-    public static void cancel(Context context, long recordId) {
-        AlarmManager alarm = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        for (int days : new int[]{7, 1}) {
-            Intent intent = new Intent(context, ReminderReceiver.class);
-            PendingIntent pending = PendingIntent.getBroadcast(
-                    context,
-                    requestCode(recordId, days),
-                    intent,
-                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE
-            );
-            if (pending != null) {
-                alarm.cancel(pending);
-                pending.cancel();
-            }
+    private static int code(long id,int days){return (int)((id*10+days)%Integer.MAX_VALUE);}
+    public static void cancel(Context c,long id){
+        for(int before:new int[]{7,1}){
+            PendingIntent p=PendingIntent.getBroadcast(c,code(id,before),new Intent(c,ReminderReceiver.class),PendingIntent.FLAG_NO_CREATE|PendingIntent.FLAG_IMMUTABLE);
+            if(p!=null){c.getSystemService(AlarmManager.class).cancel(p);p.cancel();}
         }
+        c.getSystemService(NotificationManager.class).cancel((int)id);
     }
-
-    public static void test(Context context) {
-        notifyNow(context, "Araç Defteri hazır", "Bildirimler çalışıyor. Yaklaşan kayıtları burada göreceksin.", 99881);
+    public static void rescheduleAll(Context c,AppDatabase db){
+        SharedPreferences prefs=c.getSharedPreferences("garage",0);
+        for(String old:prefs.getStringSet("scheduled",new HashSet<>()))try{cancel(c,Long.parseLong(old));}catch(NumberFormatException ignored){}
+        Set<String> ids=new HashSet<>();
+        try(Cursor cur=db.getReadableDatabase().rawQuery("SELECT r.id,r.title,r.next_date,r.next_km,r.type,r.status,v.km,v.brand,v.model FROM records r JOIN vehicle v ON v.id=r.vehicle_id WHERE r.completed=0 AND v.archived=0",null)){
+            while(cur.moveToNext()){
+                AppDatabase.Record r=new AppDatabase.Record();r.id=cur.getLong(0);r.title=cur.getString(1);r.nextDate=cur.getString(2);r.nextKm=cur.getInt(3);r.type=cur.getString(4);r.status=cur.getString(5);
+                if(!RecordRules.pending(r))continue;ids.add(""+r.id);schedule(c,r.id,r.title,r.nextDate);
+                long days=RecordRules.days(r.nextDate);boolean kmDue=r.nextKm>0&&cur.getInt(6)>=r.nextKm;
+                String signature=r.nextDate+"/"+r.nextKm+"/"+(kmDue?"km":days<=1?"1":"7");
+                if((kmDue||(days>=0&&days<=7))&&!signature.equals(prefs.getString("notified_"+r.id,""))){
+                    if(ReminderReceiver.show(c,(int)r.id,cur.getString(7)+" "+cur.getString(8)+" • "+r.title,RecordRules.dueLabel(r,cur.getInt(6)),r.id))prefs.edit().putString("notified_"+r.id,signature).apply();
+                }
+            }
+        }prefs.edit().putStringSet("scheduled",ids).apply();
     }
-
-    private static void notifyNow(Context context, String title, String text, int id) {
-        ensureChannel(context);
-        Intent intent = new Intent(context, ReminderReceiver.class);
-        intent.putExtra("title", title);
-        intent.putExtra("text", text);
-        intent.putExtra("notification_id", id);
-        context.sendBroadcast(intent);
-    }
-
-    private static int requestCode(long recordId, int days) {
-        long raw = recordId * 100L + days;
-        return (int)(Math.abs(raw) % Integer.MAX_VALUE);
-    }
-
-    private static long calendarDayDiff(Calendar now, Calendar due) {
-        Calendar a = (Calendar) now.clone();
-        Calendar b = (Calendar) due.clone();
-        a.set(Calendar.HOUR_OF_DAY, 0); a.set(Calendar.MINUTE, 0); a.set(Calendar.SECOND, 0); a.set(Calendar.MILLISECOND, 0);
-        b.set(Calendar.HOUR_OF_DAY, 0); b.set(Calendar.MINUTE, 0); b.set(Calendar.SECOND, 0); b.set(Calendar.MILLISECOND, 0);
-        return (b.getTimeInMillis() - a.getTimeInMillis()) / 86400000L;
-    }
+    public static void test(Context c){ReminderReceiver.show(c,99881,"Araç Defteri hazır","Bildirimler çalışıyor.",-1);}
 }

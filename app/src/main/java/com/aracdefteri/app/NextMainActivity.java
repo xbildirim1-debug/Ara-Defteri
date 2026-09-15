@@ -73,6 +73,12 @@ public class NextMainActivity extends Activity {
     private final ArrayList<Uri> cvPhotoUris = new ArrayList<>();
     private TextView cvPhotoCountView;
 
+    private static final int PICK_ODOMETER=3110, CAPTURE_ODOMETER=3111, EXPORT_BACKUP=3112, IMPORT_BACKUP=3113;
+    private Uri captureUri;
+    private int pendingVehicleId;
+    private String pendingAttachmentLabel="Belge";
+    private boolean creatingVehicle;
+    private android.app.ProgressDialog busyDialog;
     private int bg, surface, surface2, text, muted, accent, accentSoft, warning, danger, stroke, success;
 
     @Override
@@ -80,40 +86,48 @@ public class NextMainActivity extends Activity {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         db = new AppDatabase(this);
-        db.seedDemoIfNeeded();
+        if(db.activeId()==0&&!db.vehicles().isEmpty()) db.selectVehicle(db.vehicles().get(0).id);
+        prefs=VehiclePreferences.open(this,db.activeId());
+        if(savedInstanceState!=null){
+            String capture=savedInstanceState.getString("capture");captureUri=capture==null?null:Uri.parse(capture);
+            pendingVehicleId=savedInstanceState.getInt("pendingVehicle");pendingAttachmentRecordId=savedInstanceState.getLong("attachment",-1);
+            pendingAttachmentLabel=savedInstanceState.getString("attachmentLabel","Belge");
+        }
         resolveTheme();
         ReminderScheduler.ensureChannel(this);
         requestNotificationPermissionIfNeeded();
         renderShell();
         renderPage(0);
+        ReminderScheduler.rescheduleAll(this,db);
+        openNotification(getIntent());
     }
 
     private void resolveTheme() {
-        String mode = prefs.getString("theme_mode", "system");
+        String mode = getSharedPreferences(PREFS,0).getString("theme_mode", "system");
         if ("dark".equals(mode)) dark = true;
         else if ("light".equals(mode)) dark = false;
         else dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
 
         if (dark) {
-            bg = Color.rgb(7, 10, 12);
-            surface = Color.rgb(17, 23, 25);
-            surface2 = Color.rgb(27, 36, 38);
+            bg = Color.rgb(10, 16, 29);
+            surface = Color.rgb(20, 30, 47);
+            surface2 = Color.rgb(30, 43, 63);
             text = Color.rgb(246, 250, 249);
             muted = Color.rgb(150, 166, 163);
-            accent = Color.rgb(42, 213, 163);
-            accentSoft = Color.rgb(24, 77, 64);
+            accent = Color.rgb(119, 170, 255);
+            accentSoft = Color.rgb(32, 55, 91);
             warning = Color.rgb(255, 190, 84);
             danger = Color.rgb(255, 104, 122);
             stroke = Color.rgb(44, 58, 60);
             success = Color.rgb(82, 220, 145);
         } else {
-            bg = Color.rgb(245, 248, 247);
+            bg = Color.rgb(243, 246, 252);
             surface = Color.WHITE;
-            surface2 = Color.rgb(234, 242, 239);
-            text = Color.rgb(18, 31, 28);
+            surface2 = Color.rgb(233, 239, 249);
+            text = Color.rgb(24, 38, 61);
             muted = Color.rgb(92, 111, 106);
-            accent = Color.rgb(8, 163, 118);
-            accentSoft = Color.rgb(218, 244, 235);
+            accent = Color.rgb(39, 92, 198);
+            accentSoft = Color.rgb(225, 235, 255);
             warning = Color.rgb(204, 126, 18);
             danger = Color.rgb(213, 66, 86);
             stroke = Color.rgb(214, 227, 223);
@@ -143,6 +157,10 @@ public class NextMainActivity extends Activity {
         navBar.setPadding(dp(8), dp(6), dp(8), dp(7));
         navBar.setBackground(cardDrawable(surface, 0, stroke));
         root.addView(navBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70)));
+        root.setOnApplyWindowInsetsListener((view,insets)->{
+            if(Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.ime());view.setPadding(bars.left,bars.top,bars.right,bars.bottom);}
+            return insets;
+        });
         setContentView(root);
         buildBottomNav();
     }
@@ -190,6 +208,7 @@ private void renderPage(int page) {
         selectedRecordId = -1;
         buildBottomNav();
         LinearLayout content = newContent();
+        if(db.getVehicle().id==0){renderWelcome(content);return;}
         if (page == 0) renderHome(content);
         else if (page == 1) renderRecordsHub(content);
         else if (page == 2) renderCv(content);
@@ -202,7 +221,8 @@ private void renderPage(int page) {
         selectedRecordId = -1;
         buildBottomNav();
         LinearLayout content = newContent();
-        if ("Giderler".equals(module)) renderExpenses(content);
+        if ("Galeri".equals(module)) renderGallery(content);
+        else if ("Giderler".equals(module)) renderExpenses(content);
         else renderModule(content, module);
     }
 
@@ -216,6 +236,8 @@ private void renderPage(int page) {
     private void renderHome(LinearLayout content) {
         addHeader(content, "Araç Defteri", "Aracının dijital hafızası");
         AppDatabase.Vehicle vehicle = db.getVehicle();
+        Button garage=secondaryButton(vehicle.brand+" "+vehicle.model+"  ▾");garage.setOnClickListener(v->showGarage());
+        content.addView(garage,new LinearLayout.LayoutParams(-1,dp(48)));gap(content,12);
         content.addView(vehicleHero(vehicle));
         gap(content, 20);
 
@@ -246,7 +268,7 @@ private void renderPage(int page) {
 
         FrameLayout media = new FrameLayout(this);
         GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                dark ? new int[]{Color.rgb(12, 88, 70), Color.rgb(20, 45, 42)} : new int[]{Color.rgb(14, 181, 131), Color.rgb(4, 112, 102)});
+                dark ? new int[]{Color.rgb(38, 58, 100), Color.rgb(16, 27, 48)} : new int[]{Color.rgb(83, 132, 222), Color.rgb(35, 67, 126)});
         g.setCornerRadius(dp(24));
         media.setBackground(g);
         if (Build.VERSION.SDK_INT >= 21) media.setClipToOutline(true);
@@ -306,12 +328,15 @@ private void renderPage(int page) {
         edit.setOnClickListener(x -> openVehicleForm());
         action.addView(edit);
         outer.addView(action);
+        gap(outer,12);
+        Button mileage=primaryButton(formatInt(v.km)+" km  ·  Güncelle");mileage.setOnClickListener(x->showKmUpdate());
+        outer.addView(mileage,new LinearLayout.LayoutParams(-1,dp(50)));
         return outer;
     }
 
     private void renderRecordsHub(LinearLayout content) {
         addHeader(content, "Kayıtlar", "Her konu kendi alanında, karışıklık yok");
-        String[] modules = {"Bakım", "Hasar", "Ekspertiz", "Muayene", "Vergi", "Sigorta/Kasko", "Yakıt", "Giderler"};
+        String[] modules = {"Bakım", "Hasar", "Ekspertiz", "Muayene", "Vergi", "Sigorta/Kasko", "Yakıt", "Lastik", "Giderler", "Galeri"};
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(2);
         for (String module : modules) addModuleTile(grid, module);
@@ -334,7 +359,8 @@ private void renderPage(int page) {
         tile.setOnClickListener(v -> openModule(module));
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
         lp.width = 0;
-        lp.height = dp(166);
+        lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        tile.setMinimumHeight(dp(170));
         lp.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
         lp.setMargins(0, 0, dp(9), dp(9));
         grid.addView(tile, lp);
@@ -353,6 +379,7 @@ private void renderPage(int page) {
         content.addView(tools);
         gap(content, 16);
 
+        if("Yakıt".equals(module)) renderConsumption(content);
         List<AppDatabase.Record> records = db.getRecordsByType(module);
         if (records.isEmpty()) content.addView(infoCard("Henüz kayıt yok", moduleEmptyText(module), moduleColor(module)));
         else for (AppDatabase.Record r : records) content.addView(recordCard(r));
@@ -427,6 +454,7 @@ private void renderPage(int page) {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
+        renderRecordExtras(content,r);
         Button edit = secondaryButton("Düzenle");
         edit.setOnClickListener(v -> openRecordForm(currentModule, r));
         actions.addView(edit, new LinearLayout.LayoutParams(0, dp(48), 1f));
@@ -446,6 +474,8 @@ private void renderPage(int page) {
 
     private static class FormRefs {
         EditText title, km, cost, detail, quantity, nextKm, extraText;
+        java.util.Map<String,EditText> fields=new java.util.LinkedHashMap<>();
+        java.util.Map<String,Spinner> choices=new java.util.LinkedHashMap<>();
         DateInput date, nextDate;
         Spinner subtype, status;
         ArrayList<CheckBox> parts = new ArrayList<>();
@@ -519,6 +549,12 @@ private void renderPage(int page) {
             f.extraText = formField(form, "Poliçe no (isteğe bağlı, CV'de varsayılan gizli)", base.extra, InputType.TYPE_CLASS_TEXT);
             f.detail = formMultiline(form, "Şirket / teminat notları", base.detail);
             f.nextDate = formDate(form, "Bitiş tarihi", base.nextDate, true);
+        } else if ("Lastik".equals(module)) {
+            f.subtype=formSpinner(form,"Lastik türü",new String[]{"Yazlık","Kışlık","Dört mevsim"},base.subtype);
+            f.cost=formField(form,"Tutar (isteğe bağlı)",moneyRaw(base.cost),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            f.detail=formMultiline(form,"Değişim / saklama notları",base.detail);
+            f.nextDate=formDate(form,"Sonraki kontrol tarihi",base.nextDate,true);
+            f.nextKm=formField(form,"Sonraki kontrol kilometresi",base.nextKm>0?""+base.nextKm:"",InputType.TYPE_CLASS_NUMBER);
         } else if ("Yakıt".equals(module)) {
             String defaultFuel = existing == null ? fuelRecordDefault(vehicle.fuelType) : base.subtype;
             f.subtype = formSpinner(form, "Yakıt / enerji türü", new String[]{"Benzin", "Dizel", "LPG", "Elektrik", "CNG", "Diğer"}, defaultFuel);
@@ -535,6 +571,7 @@ private void renderPage(int page) {
             auto.setPadding(0, dp(4), 0, 0);
             form.addView(auto);
         }
+        addTurkeyFields(form,module,base,f);
         content.addView(form);
         gap(content, 14);
 
@@ -551,6 +588,10 @@ private void renderPage(int page) {
         if (date.isEmpty()) { toast("Tarih seçmelisin"); return; }
         if (km < 0) { toast("Kilometreyi kontrol et"); return; }
 
+        if(RecordRules.date(date)==null){toast("Geçerli bir tarih seç");return;}
+        if(f.cost!=null&&!validDecimal(f.cost,true)){return;}
+        if(f.quantity!=null&&!validDecimal(f.quantity,false)){return;}
+        if(f.nextKm!=null&&!f.nextKm.getText().toString().trim().isEmpty()&&safeInt(f.nextKm.getText().toString(),-1)<0){f.nextKm.setError("Geçerli kilometre gir");return;}
         r.type = module;
         r.title = title;
         r.date = date;
@@ -578,13 +619,19 @@ private void renderPage(int page) {
             if (r.cost <= 0) { toast("Toplam ödenen tutarı girmelisin"); return; }
         }
 
+        org.json.JSONObject metadata=new org.json.JSONObject();
+        try{for(java.util.Map.Entry<String,EditText> e:f.fields.entrySet())metadata.put(e.getKey(),e.getValue().getText().toString().trim());
+            for(java.util.Map.Entry<String,Spinner> e:f.choices.entrySet())metadata.put(e.getKey(),String.valueOf(e.getValue().getSelectedItem()));
+        }catch(org.json.JSONException ignored){}
+        r.metadata=metadata.toString();
+        if(!r.nextDate.isEmpty()&&RecordRules.date(r.nextDate)==null){toast("Sonraki tarihi kontrol et");return;}
         if (editing) {
             ReminderScheduler.cancel(this, r.id);
             db.updateRecord(r);
         } else {
             r.id = db.addRecord(r);
         }
-        if (!r.nextDate.isEmpty()) ReminderScheduler.schedule(this, r.id, r.title, r.nextDate);
+        ReminderScheduler.rescheduleAll(this,db);
         toast(editing ? "Kayıt güncellendi" : "Kayıt oluşturuldu");
         openRecordDetail(r.id);
     }
@@ -609,6 +656,7 @@ private void renderPage(int page) {
         summary.addView(tv("TOPLAM KAYITLI GİDER", muted, 10, true));
         summary.addView(tv(formatMoney(db.getExpenseTotal()), text, 27, true));
         content.addView(summary);
+        renderSpending(content);
         gap(content, 12);
         Button add = compactPrimary("+ Gider ekle");
         add.setOnClickListener(v -> openExpenseForm(null));
@@ -778,6 +826,14 @@ private void renderCv(LinearLayout content) {
         content.addView(photoCard);
         gap(content,13);
 
+        sectionTitle(content,"CV geçmişi","Paylaşmak istediğin kayıtları seç");
+        java.util.Set<String> excluded=new java.util.HashSet<>(Arrays.asList(prefs.getString("cv_excluded","").split(",")));
+        for(AppDatabase.Record record:db.getRecords(Integer.MAX_VALUE)){
+            CheckBox choice=new CheckBox(this);choice.setText(record.date+" • "+record.title);choice.setTextColor(text);choice.setChecked(!excluded.contains(""+record.id));
+            choice.setOnCheckedChangeListener((button,checked)->{if(checked)excluded.remove(""+record.id);else excluded.add(""+record.id);prefs.edit().putString("cv_excluded",String.join(",",excluded)).apply();});content.addView(choice);
+        }
+        CheckBox includeAttachments=new CheckBox(this);includeAttachments.setText("Seçili kayıtların fotoğraflarını da ekle");includeAttachments.setTextColor(text);includeAttachments.setChecked(prefs.getBoolean("cv_attachments",false));
+        includeAttachments.setOnCheckedChangeListener((button,checked)->prefs.edit().putBoolean("cv_attachments",checked).apply());content.addView(includeAttachments);
         sectionTitle(content, "PDF seçenekleri", "İsteğe bağlı bilgileri seç");
         LinearLayout options = card();
         options.setPadding(dp(12),dp(10),dp(12),dp(11));
@@ -835,7 +891,7 @@ private void renderCv(LinearLayout content) {
         theme.setPadding(dp(10),dp(10),dp(10),dp(10));
         LinearLayout segmented = new LinearLayout(this);
         segmented.setOrientation(LinearLayout.HORIZONTAL);
-        String selected = prefs.getString("theme_mode","system");
+        String selected = getSharedPreferences(PREFS,0).getString("theme_mode","system");
         addThemeSegment(segmented,"Sistem","system",selected);
         addThemeSegment(segmented,"Açık","light",selected);
         addThemeSegment(segmented,"Koyu","dark",selected);
@@ -859,6 +915,10 @@ private void renderCv(LinearLayout content) {
         content.addView(notifications);
         gap(content,18);
 
+        sectionTitle(content,"Yedekleme","Fotoğraf, belge ve bütün araç kayıtları birlikte");
+        Button backup=secondaryButton("Yedek dosyası oluştur");backup.setOnClickListener(v->pickBackup(false));content.addView(backup,new LinearLayout.LayoutParams(-1,dp(50)));gap(content,8);
+        Button restore=secondaryButton("Yedekten geri yükle");restore.setOnClickListener(v->pickBackup(true));content.addView(restore,new LinearLayout.LayoutParams(-1,dp(50)));gap(content,16);
+        Button vehicles=secondaryButton("Araçlarım ve arşiv");vehicles.setOnClickListener(v->showGarage());content.addView(vehicles,new LinearLayout.LayoutParams(-1,dp(50)));gap(content,18);
         sectionTitle(content, "Gizlilik", "Toplamadığımız veri en güvenli veridir");
         content.addView(infoCard("Şase/VIN yok", "Uygulama şase numarası istemez, saklamaz veya CV'ye yazmaz.", accent));
     }
@@ -869,7 +929,7 @@ private void renderCv(LinearLayout content) {
         t.setGravity(Gravity.CENTER);
         t.setBackground(cardDrawable(active ? accentSoft : Color.TRANSPARENT, dp(13), Color.TRANSPARENT));
         t.setOnClickListener(v -> {
-            prefs.edit().putString("theme_mode", value).apply();
+            getSharedPreferences(PREFS,0).edit().putString("theme_mode", value).apply();
             recreate();
         });
         parent.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
@@ -882,9 +942,13 @@ private void openVehicleForm() {
         buildBottomNav();
         LinearLayout content = newContent();
         addBackHeader(content,"Araç bilgileri","Türkiye kataloğundan seç; teknik bilgiler otomatik dolsun",()->renderPage(0));
-        AppDatabase.Vehicle v = db.getVehicle();
+        final boolean adding=creatingVehicle;creatingVehicle=false;
+        AppDatabase.Vehicle v = adding?new AppDatabase.Vehicle():db.getVehicle();
+        if(adding)v.year=Calendar.getInstance().get(Calendar.YEAR);
+        SharedPreferences formPrefs=adding?getSharedPreferences("vehicle_draft",0):prefs;
+        if(adding)formPrefs.edit().clear().commit();
 
-        String savedType = prefs.getString("vehicle_type", TurkeyVehicleCatalog.TYPE_CAR);
+        String savedType = formPrefs.getString("vehicle_type", TurkeyVehicleCatalog.TYPE_CAR);
         LinearLayout form = card();
         form.setPadding(dp(16),dp(16),dp(16),dp(16));
         form.addView(formSection("Araç seçimi", "Araç türü → marka → model → yıl → motor / paket"));
@@ -893,7 +957,7 @@ private void openVehicleForm() {
         Spinner brand = formSpinner(form,"Marka",TurkeyVehicleCatalog.brandsForType(savedType),v.brand);
         Spinner model = formSpinner(form,"Model",TurkeyVehicleCatalog.modelsFor(savedType,v.brand),v.model);
         Spinner year = formSpinner(form,"Model yılı",TurkeyVehicleCatalog.years(),String.valueOf(v.year));
-        String savedVariant = prefs.getString("vehicle_catalog_variant", "");
+        String savedVariant = formPrefs.getString("vehicle_catalog_variant", "");
         Spinner variant = formSpinner(form,"Motor / paket / versiyon",
                 TurkeyVehicleSpecs.variantLabels(v.brand, v.model, v.year), savedVariant);
 
@@ -901,20 +965,20 @@ private void openVehicleForm() {
         EditText manualModel = formField(form,"Manuel model (yalnız listede yoksa)","Listede yok / Manuel".equals(String.valueOf(model.getSelectedItem())) ? v.model : "",InputType.TYPE_CLASS_TEXT);
 
         form.addView(formSection("Otomatik teknik bilgiler", "Eşleşen varyant seçildiğinde aşağıdaki alanlar katalogdan doldurulur"));
-        Spinner body = formSpinner(form,"Kasa tipi",TurkeyVehicleCatalog.bodyTypesFor(savedType),prefs.getString("vehicle_body", ""));
+        Spinner body = formSpinner(form,"Kasa tipi",TurkeyVehicleCatalog.bodyTypesFor(savedType),formPrefs.getString("vehicle_body", ""));
         Spinner fuel = formSpinner(form,"Yakıt / güç tipi",TurkeyVehicleCatalog.fuelTypes(),v.fuelType);
-        Spinner transmission = formSpinner(form,"Şanzıman",TurkeyVehicleCatalog.transmissions(),prefs.getString("vehicle_transmission", ""));
-        EditText generation = formField(form,"Nesil / seri",prefs.getString("vehicle_generation", ""),InputType.TYPE_CLASS_TEXT);
-        EditText trim = formField(form,"Paket / versiyon",prefs.getString("vehicle_trim", ""),InputType.TYPE_CLASS_TEXT);
-        EditText engine = formField(form,"Motor",prefs.getString("vehicle_engine", ""),InputType.TYPE_CLASS_TEXT);
-        EditText power = formField(form,"Motor gücü",prefs.getString("vehicle_power", ""),InputType.TYPE_CLASS_TEXT);
-        EditText drivetrain = formField(form,"Çekiş",prefs.getString("vehicle_drivetrain", ""),InputType.TYPE_CLASS_TEXT);
+        Spinner transmission = formSpinner(form,"Şanzıman",TurkeyVehicleCatalog.transmissions(),formPrefs.getString("vehicle_transmission", ""));
+        EditText generation = formField(form,"Nesil / seri",formPrefs.getString("vehicle_generation", ""),InputType.TYPE_CLASS_TEXT);
+        EditText trim = formField(form,"Paket / versiyon",formPrefs.getString("vehicle_trim", ""),InputType.TYPE_CLASS_TEXT);
+        EditText engine = formField(form,"Motor",formPrefs.getString("vehicle_engine", ""),InputType.TYPE_CLASS_TEXT);
+        EditText power = formField(form,"Motor gücü",formPrefs.getString("vehicle_power", ""),InputType.TYPE_CLASS_TEXT);
+        EditText drivetrain = formField(form,"Çekiş",formPrefs.getString("vehicle_drivetrain", ""),InputType.TYPE_CLASS_TEXT);
         TextView catalogState = tv("Model ve yılı seçtiğinde uygun motor/paket seçenekleri otomatik yüklenir.", accent, 10, true);
         catalogState.setPadding(dp(2),dp(2),dp(2),dp(12));
         form.addView(catalogState);
 
         form.addView(formSection("Sana özel bilgiler", "Bunlar katalogdan gelmez"));
-        EditText color = formField(form,"Renk (isteğe bağlı)",prefs.getString("vehicle_color", ""),InputType.TYPE_CLASS_TEXT);
+        EditText color = formField(form,"Renk (isteğe bağlı)",formPrefs.getString("vehicle_color", ""),InputType.TYPE_CLASS_TEXT);
         EditText km = formField(form,"Güncel kilometre",String.valueOf(v.km),InputType.TYPE_CLASS_NUMBER);
 
         final boolean[] updating = {false};
@@ -1015,7 +1079,9 @@ private void openVehicleForm() {
                 return;
             }
             int selectedYear = safeInt(String.valueOf(year.getSelectedItem()), v.year);
-            db.updateVehicle(
+            int newKm=safeInt(km.getText().toString(),-1);if(newKm<0||newKm>9999999){km.setError("Geçerli kilometre gir");return;}
+            if(adding)db.createVehicle(selectedBrand,selectedModel,selectedYear,newKm,String.valueOf(fuel.getSelectedItem()));
+            else db.updateVehicle(
                     selectedBrand,
                     selectedModel,
                     selectedYear,
@@ -1023,6 +1089,7 @@ private void openVehicleForm() {
                     safeInt(km.getText().toString(),v.km),
                     String.valueOf(fuel.getSelectedItem())
             );
+            prefs=VehiclePreferences.open(this,db.activeId());
             prefs.edit()
                     .putString("vehicle_type", selectedType)
                     .putString("vehicle_catalog_variant", String.valueOf(variant.getSelectedItem()))
@@ -1035,6 +1102,8 @@ private void openVehicleForm() {
                     .putString("vehicle_drivetrain", drivetrain.getText().toString().trim())
                     .putString("vehicle_color", color.getText().toString().trim())
                     .apply();
+            if(newKm!=v.km)db.updateKm(newKm,"Araç bilgileri");
+            ReminderScheduler.rescheduleAll(this,db);
             toast("Araç profili ve teknik bilgiler kaydedildi");
             renderPage(0);
         });
@@ -1421,7 +1490,7 @@ private void openVehicleForm() {
         LinearLayout texts = new LinearLayout(this);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.addView(tv(r.title,text,14,true));
-        String next = !r.nextDate.isEmpty() ? r.nextDate : (r.nextKm>0 ? formatInt(r.nextKm)+" km" : "Planlı işlem");
+        String next = RecordRules.dueLabel(r,db.getVehicle().km);
         texts.addView(tv(r.type+"  •  "+next,muted,10,false));
         row.addView(texts,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
         c.addView(row);
@@ -1446,6 +1515,8 @@ private void openVehicleForm() {
     private String moduleTitle(String m) {
         if("Bakım".equals(m)) return "Bakım & Onarım";
         if("Sigorta/Kasko".equals(m)) return "Sigorta & Kasko";
+        if("Vergi".equals(m))return "MTV / Vergi";
+        if("Yakıt".equals(m))return "Yakıt / Şarj";
         return m;
     }
 
@@ -1523,6 +1594,7 @@ private void openVehicleForm() {
     }
 
     private void pickVehicleImage() {
+        pendingVehicleId=db.activeId();
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
@@ -1530,6 +1602,7 @@ private void openVehicleForm() {
     }
 
     private void pickGalleryImage() {
+        pendingVehicleId=db.activeId();
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
@@ -1551,7 +1624,7 @@ private void openVehicleForm() {
     }
 
     private void pickRecordAttachment(long id) {
-        pendingAttachmentRecordId=id;
+        pendingAttachmentRecordId=id;pendingVehicleId=db.activeId();
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("*/*");
@@ -1562,7 +1635,11 @@ private void openVehicleForm() {
     @Override
 protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(resultCode!=RESULT_OK || data==null) return;
+        if(resultCode!=RESULT_OK) return;
+        if(requestCode==CAPTURE_ODOMETER){if(captureUri!=null)readOdometer(captureUri);return;}
+        if(data==null)return;
+        if(requestCode==PICK_ODOMETER){if(data.getData()!=null)readOdometer(data.getData());return;}
+        if(requestCode==EXPORT_BACKUP||requestCode==IMPORT_BACKUP){if(data.getData()!=null)runBackup(requestCode==IMPORT_BACKUP,data.getData());return;}
 
         if (requestCode == PICK_CV_IMAGES) {
             int added = 0;
@@ -1588,6 +1665,17 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         try {
             getContentResolver().takePersistableUriPermission(uri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch(Exception ignored) {}
+        if(requestCode==PICK_VEHICLE_IMAGE||requestCode==PICK_GALLERY_IMAGE||requestCode==PICK_RECORD_ATTACHMENT){
+            final Uri source=uri;final int request=requestCode;
+            final long record=pendingAttachmentRecordId;final int vehicle=pendingVehicleId;final String label=pendingAttachmentLabel;
+            runWork("Dosya saklanıyor",()->{
+                Uri local=MediaFiles.copy(this,source);
+                if(vehicle!=db.activeId())throw new Exception("Araç değişti; dosyayı tekrar seç");
+                if(request==PICK_VEHICLE_IMAGE)prefs.edit().putString("vehicle_photo_uri",local.toString()).commit();
+                else if(request==PICK_GALLERY_IMAGE)db.addPhoto(local.toString(),today());
+                else db.addAttachment(record,local.toString(),label);
+            },()->{if(request==PICK_RECORD_ATTACHMENT)openRecordDetail(record);else if(request==PICK_GALLERY_IMAGE)openModule("Galeri");else renderPage(0);});return;
+        }
         if(requestCode==PICK_VEHICLE_IMAGE) {
             prefs.edit().putString("vehicle_photo_uri",uri.toString()).apply();
             renderPage(0);
@@ -1682,4 +1770,162 @@ private void createVehiclePdf() {
 
     private String truncate(String s,int max) { return s.length()<=max?s:s.substring(0,max-1)+"…"; }
     private void toast(String s) { Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
+    @Override protected void onSaveInstanceState(Bundle out){
+        super.onSaveInstanceState(out);if(captureUri!=null)out.putString("capture",captureUri.toString());
+        out.putInt("pendingVehicle",pendingVehicleId);out.putLong("attachment",pendingAttachmentRecordId);out.putString("attachmentLabel",pendingAttachmentLabel);
+    }
+    private void openNotification(Intent intent){
+        long id=intent.getLongExtra("record_id",-1);if(id<0)return;
+        try(android.database.Cursor cur=db.getReadableDatabase().rawQuery("SELECT vehicle_id FROM records WHERE id=?",new String[]{""+id})){
+            if(cur.moveToFirst()){db.selectVehicle(cur.getInt(0));prefs=VehiclePreferences.open(this,db.activeId());openRecordDetail(id);}
+        }
+    }
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);openNotification(intent);}
+    private void renderWelcome(LinearLayout content){
+        gap(content,40);content.addView(tv("Her kilometrenin\nbir hikâyesi var.",text,32,true));gap(content,14);
+        content.addView(tv("Aracını ekle. Bakımını, masraflarını ve fotoğraflarını tek yerde tut.",muted,16,false));gap(content,32);
+        Button add=primaryButton("İlk aracımı ekle");add.setOnClickListener(v->{creatingVehicle=true;openVehicleForm();});content.addView(add,new LinearLayout.LayoutParams(-1,dp(54)));gap(content,12);
+        Button restore=secondaryButton("Yedeğim var");restore.setOnClickListener(v->pickBackup(true));content.addView(restore,new LinearLayout.LayoutParams(-1,dp(50)));
+    }
+    private void showGarage(){
+        currentModule="Araçlar";LinearLayout content=newContent();addBackHeader(content,"Garajım","Araçlar ve saklanan geçmişleri",()->renderPage(0));
+        Button add=primaryButton("+ Araç ekle");add.setOnClickListener(v->{creatingVehicle=true;openVehicleForm();});content.addView(add,new LinearLayout.LayoutParams(-1,dp(50)));gap(content,16);
+        for(AppDatabase.Vehicle vehicle:db.vehicles()){
+            LinearLayout box=card();box.setPadding(dp(16),dp(16),dp(16),dp(16));
+            box.addView(tv(vehicle.brand+" "+vehicle.model,text,19,true));box.addView(tv(vehicle.year+" • "+formatInt(vehicle.km)+" km"+(vehicle.archived?" • Arşiv":""),muted,13,false));gap(box,12);
+            Button select=secondaryButton(vehicle.id==db.activeId()?"Seçili araç":"Aracı aç");select.setOnClickListener(v->{db.selectVehicle(vehicle.id);prefs=VehiclePreferences.open(this,vehicle.id);cvPhotoUris.clear();renderPage(0);});box.addView(select);
+            Button archive=secondaryButton(vehicle.archived?"Arşivden çıkar":"Satıldı / Arşivle");archive.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(vehicle.archived?"Arşivden çıkarılsın mı?":"Araç arşivlensin mi?").setMessage("Kayıtlar ve fotoğraflar saklanır. Arşivdeki araç için hatırlatma gönderilmez.").setNegativeButton("Vazgeç",null).setPositiveButton("Onayla",(d,w)->{db.archiveVehicle(vehicle.id,!vehicle.archived);ReminderScheduler.rescheduleAll(this,db);showGarage();}).show());box.addView(archive);
+            content.addView(box);gap(content,12);
+        }
+    }
+    private void showKmUpdate(){
+        new AlertDialog.Builder(this).setTitle("Kilometre güncelle").setItems(new String[]{"Manuel gir","Gösterge fotoğrafı seç","Gösterge fotoğrafı çek","Kilometre geçmişi"},(d,w)->{
+            if(w==0)manualKm("", "Manuel");else if(w==3){new AlertDialog.Builder(this).setTitle("Kilometre geçmişi").setMessage(String.join("\n\n",db.kmHistory())).setPositiveButton("Kapat",null).show();}
+            else{pendingVehicleId=db.activeId();if(w==1){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,PICK_ODOMETER);}else captureOdometer();}
+        }).show();
+    }
+    private void captureOdometer(){
+        try{File dir=new File(getCacheDir(),"capture");dir.mkdirs();captureUri=MediaFiles.uri(this,new File(dir,"odometer-"+System.currentTimeMillis()+".jpg"));
+            Intent i=new Intent(MediaStore.ACTION_IMAGE_CAPTURE).putExtra(MediaStore.EXTRA_OUTPUT,captureUri).addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            i.setClipData(android.content.ClipData.newRawUri("Gösterge",captureUri));startActivityForResult(i,CAPTURE_ODOMETER);
+        }catch(Exception e){toast("Kamera açılamadı. Kilometreyi manuel girebilirsin.");manualKm("","Manuel");}
+    }
+    private void readOdometer(Uri uri){
+        if(pendingVehicleId!=db.activeId()){toast("Araç değişti; fotoğrafı yeniden seç");return;}
+        showBusy("Kilometre okunuyor…");
+        com.google.mlkit.vision.text.TextRecognizer recognizer=com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS);
+        try{
+            com.google.mlkit.vision.common.InputImage image=com.google.mlkit.vision.common.InputImage.fromFilePath(this,uri);
+            recognizer.process(image).addOnSuccessListener(result->{
+                hideBusy();recognizer.close();if(isFinishing()||isDestroyed())return;
+                List<Integer> values=OdometerParser.candidates(result.getText());
+                if(values.isEmpty()){manualKm("","Kilometre okunamadı. Manuel gir");return;}
+                if(values.size()==1){manualKm(""+values.get(0),"Fotoğraftan okundu; toplam kilometreyi kontrol et");return;}
+                String[] choices=new String[values.size()+1];for(int i=0;i<values.size();i++)choices[i]=formatInt(values.get(i))+" km";choices[values.size()]="Hiçbiri — manuel gir";
+                new AlertDialog.Builder(this).setTitle("Toplam kilometre hangisi?").setItems(choices,(d,w)->manualKm(w<values.size()?""+values.get(w):"","Fotoğraf sonucu; kontrol ederek kaydet")).setNegativeButton("Vazgeç",null).show();
+            }).addOnFailureListener(e->{hideBusy();recognizer.close();if(!isFinishing()&&!isDestroyed())manualKm("","Kilometre okunamadı. Manuel gir");});
+        }catch(Exception e){hideBusy();recognizer.close();manualKm("","Kilometre okunamadı. Manuel gir");}
+    }
+    private void manualKm(String value,String source){
+        LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);form.setPadding(dp(24),dp(10),dp(24),0);
+        form.addView(tv(source,muted,14,false));form.addView(tv("Kayıtlı: "+formatInt(db.getVehicle().km)+" km",text,14,true));
+        EditText km=formField(form,"Toplam kilometre",value,InputType.TYPE_CLASS_NUMBER);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Kilometre güncelle").setView(form).setNegativeButton("Vazgeç",null).setPositiveButton("Kaydet",null).create();
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            int parsed=safeInt(km.getText().toString(),-1);if(parsed<0||parsed>9999999){km.setError("Geçerli bir kilometre gir");return;}
+            Runnable save=()->{db.updateKm(parsed,source.startsWith("Foto")?"Fotoğraf • kullanıcı onaylı":"Manuel");ReminderScheduler.rescheduleAll(this,db);dialog.dismiss();renderPage(0);};
+            if(parsed<db.getVehicle().km)new AlertDialog.Builder(this).setTitle("Önceki kilometreden düşük").setMessage("Kayıtlı değeri düzeltmek istediğinden emin misin? Önceki güncellemeler geçmişte saklanır.").setNegativeButton("Kontrol et",null).setPositiveButton("Düzelt",(x,w)->save.run()).show();else save.run();
+        }));dialog.show();
+    }
+    private org.json.JSONObject meta(AppDatabase.Record r){try{return new org.json.JSONObject(r.metadata);}catch(Exception e){return new org.json.JSONObject();}}
+    private void metadataField(LinearLayout form,FormRefs f,org.json.JSONObject data,String key,String label,int type){f.fields.put(key,formField(form,label,data.optString(key,""),type));}
+    private void metadataChoice(LinearLayout form,FormRefs f,org.json.JSONObject data,String key,String label,String[] values){f.choices.put(key,formSpinner(form,label,values,data.optString(key,"")));}
+    private void addTurkeyFields(LinearLayout form,String module,AppDatabase.Record r,FormRefs f){
+        org.json.JSONObject data=meta(r);int textType=InputType.TYPE_CLASS_TEXT;
+        form.addView(formSection("Ek bilgiler","İsteğe bağlı; belge ve fotoğrafları kaydı oluşturduktan sonra ekleyebilirsin"));
+        if("Bakım".equals(module))metadataField(form,f,data,"service","Servis / usta adı",textType);
+        if("Muayene".equals(module))metadataChoice(form,f,data,"inspection_kind","İşlem türü",new String[]{"Araç muayenesi","Egzoz emisyon ölçümü"});
+        if("Vergi".equals(module)){
+            metadataField(form,f,data,"tax_year","Vergi yılı",InputType.TYPE_CLASS_NUMBER);
+            metadataChoice(form,f,data,"installment","Taksit",new String[]{"1. taksit","2. taksit","Tek ödeme","Diğer"});
+        }
+        if("Sigorta/Kasko".equals(module)){
+            metadataField(form,f,data,"company","Sigorta şirketi",textType);
+            metadataField(form,f,data,"agent_phone","Acente telefonu (isteğe bağlı)",InputType.TYPE_CLASS_PHONE);
+            form.addView(tv("Tarih: poliçe başlangıcı • Bitiş tarihi: yenileme hatırlatması",muted,12,false));
+        }
+        if("Lastik".equals(module)){
+            metadataField(form,f,data,"tyre_brand","Marka / model",textType);
+            metadataField(form,f,data,"tyre_size","Ebat (ör. 205/55 R16)",textType);
+            metadataField(form,f,data,"tyre_storage","Saklandığı yer",textType);
+        }
+        if("Hasar".equals(module)||"Ekspertiz".equals(module)){
+            form.addView(tv("Kullanıcı beyanıdır; resmî hasar sorgusu değildir.",muted,12,false));
+            String[] parts={"Ön tampon","Arka tampon","Kaput","Tavan","Bagaj kapağı","Sol ön çamurluk","Sağ ön çamurluk","Sol arka çamurluk","Sağ arka çamurluk","Sol ön kapı","Sağ ön kapı","Sol arka kapı","Sağ arka kapı"};
+            for(int i=0;i<parts.length;i++)metadataChoice(form,f,data,"body_"+i,parts[i],new String[]{"Belirtilmedi","Orijinal","Boyalı","Lokal boyalı","Değişen","Hasarlı"});
+        }
+    }
+    private void renderRecordExtras(LinearLayout content,AppDatabase.Record r){
+        org.json.JSONObject data=meta(r);String[] keys={"service","inspection_kind","tax_year","installment","company","agent_phone","tyre_brand","tyre_size","tyre_storage"};
+        String[] labels={"Servis","İşlem","Vergi yılı","Taksit","Şirket","Acente telefonu","Lastik","Ebat","Saklama"};
+        LinearLayout box=card();box.setPadding(dp(16),dp(12),dp(16),dp(12));
+        for(int i=0;i<keys.length;i++)if(!data.optString(keys[i],"").isEmpty())detailRow(box,labels[i],data.optString(keys[i]));
+        String[] parts={"Ön tampon","Arka tampon","Kaput","Tavan","Bagaj kapağı","Sol ön çamurluk","Sağ ön çamurluk","Sol arka çamurluk","Sağ arka çamurluk","Sol ön kapı","Sağ ön kapı","Sol arka kapı","Sağ arka kapı"};
+        for(int i=0;i<parts.length;i++){String state=data.optString("body_"+i,"");if(!state.isEmpty()&&!state.equals("Belirtilmedi"))detailRow(box,parts[i],state);}
+        if(box.getChildCount()>0){content.addView(box);gap(content,12);}
+        for(AppDatabase.Attachment a:db.attachments(r.id)){
+            Button open=secondaryButton(a.label+" · Aç");open.setOnClickListener(v->openAttachment(a.uri));content.addView(open,new LinearLayout.LayoutParams(-1,dp(48)));gap(content,6);
+        }
+        Button add=secondaryButton("+ Fotoğraf / belge ekle");add.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Belge türü").setItems(new String[]{"Fotoğraf","Onarım öncesi","Onarım sonrası","Fatura / makbuz","Poliçe / rapor"},(d,w)->{pendingAttachmentLabel=new String[]{"Fotoğraf","Onarım öncesi","Onarım sonrası","Fatura / makbuz","Poliçe / rapor"}[w];pickRecordAttachment(r.id);}).show());content.addView(add,new LinearLayout.LayoutParams(-1,dp(48)));gap(content,8);
+        if(!r.completed&&(!r.nextDate.isEmpty()||r.nextKm>0)){
+            Button done=secondaryButton("İşlemi tamamlandı işaretle");done.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Hatırlatma kapatılsın mı?").setMessage("Bu kaydın hatırlatmaları kapanır. Sonraki işlem için yeni kayıt ekleyebilirsin.").setNegativeButton("Vazgeç",null).setPositiveButton("Tamamlandı",(d,w)->{db.completeRecord(r.id);ReminderScheduler.rescheduleAll(this,db);openRecordDetail(r.id);}).show());content.addView(done,new LinearLayout.LayoutParams(-1,dp(48)));gap(content,12);
+        }
+        if(r.completed){content.addView(tv("Tamamlandı • Hatırlatma kapalı",success,13,true));gap(content,12);}
+    }
+    private boolean validDecimal(EditText field,boolean optional){
+        String value=field.getText().toString().trim();if(optional&&value.isEmpty())return true;
+        try{double n=Double.parseDouble(value.replace(',','.'));if(Double.isFinite(n)&&n>=0&&n<=1e10)return true;}catch(Exception ignored){}
+        field.setError("Geçerli, negatif olmayan bir tutar / miktar gir");return false;
+    }
+    private void renderConsumption(LinearLayout content){
+        List<RecordRules.Consumption> values=RecordRules.consumption(db.getRecordsByType("Yakıt"));
+        if(values.isEmpty())content.addView(infoCard("Tüketim için veri birikiyor","Aynı yakıt türünde iki tam depo kaydı gerekir. Aradaki yakıt alımlarını da kaydet.",accent));
+        for(RecordRules.Consumption c:values){content.addView(infoCard(c.fuel+" • "+trimDouble(c.per100())+" "+c.unit+" / 100 km",formatMoney(c.perKm())+" / km • "+c.distance+" km • "+c.intervals+" tam depo aralığı",accent));gap(content,8);}
+        content.addView(tv("Şarj kayıtları kWh ve tutarı gösterir. Elektrik ve birden fazla yakıtla gidilen mesafe ayrı ölçülmediği için toplam tüketim hesabı yapılmaz.",muted,12,false));gap(content,14);
+    }
+    private void renderSpending(LinearLayout content){
+        java.time.LocalDate now=java.time.LocalDate.now();double month=0,year=0;
+        java.util.Map<String,Double> groups=new java.util.LinkedHashMap<>();
+        for(AppDatabase.Record r:db.getRecords(Integer.MAX_VALUE)){
+            java.time.LocalDate d=RecordRules.date(r.date);if(d!=null&&d.getYear()==now.getYear()){year+=r.cost;if(d.getMonth()==now.getMonth())month+=r.cost;groups.put(moduleTitle(r.type),groups.getOrDefault(moduleTitle(r.type),0d)+r.cost);}
+        }
+        for(AppDatabase.Expense e:db.getExpenses()){
+            java.time.LocalDate d=RecordRules.date(e.date);if(d!=null&&d.getYear()==now.getYear()){year+=e.amount;if(d.getMonth()==now.getMonth())month+=e.amount;groups.put(e.category,groups.getOrDefault(e.category,0d)+e.amount);}
+        }
+        gap(content,16);sectionTitle(content,"Harcama özeti","Kayıt tarihine göre");content.addView(infoCard("Bu ay: "+formatMoney(month),"Bu yıl: "+formatMoney(year),accent));gap(content,12);
+        for(java.util.Map.Entry<String,Double> e:groups.entrySet())if(e.getValue()>0){
+            LinearLayout row=card();row.setPadding(dp(16),dp(12),dp(16),dp(12));row.addView(tv(e.getKey()+" · "+formatMoney(e.getValue()),text,14,true));
+            android.widget.ProgressBar bar=new android.widget.ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(1000);bar.setProgress(year>0?(int)(1000*e.getValue()/year):0);bar.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));row.addView(bar,new LinearLayout.LayoutParams(-1,dp(16)));content.addView(row);gap(content,6);
+        }
+    }
+    private interface Work {void run()throws Exception;}
+    private void showBusy(String message){busyDialog=new android.app.ProgressDialog(this);busyDialog.setMessage(message);busyDialog.setCancelable(false);busyDialog.show();}
+    private void hideBusy(){if(busyDialog!=null){busyDialog.dismiss();busyDialog=null;}}
+    private void runWork(String message,Work work,Runnable done){
+        showBusy(message);setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        new Thread(()->{Exception failure=null;try{work.run();}catch(Exception e){failure=e;}final Exception error=failure;
+            runOnUiThread(()->{hideBusy();setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);if(isFinishing()||isDestroyed())return;
+                if(error!=null)new AlertDialog.Builder(this).setTitle("İşlem tamamlanamadı").setMessage(error.getMessage()==null?"Dosyayı ve boş alanı kontrol edip tekrar dene.":error.getMessage()).setPositiveButton("Tamam",null).show();else done.run();});
+        },"arac-files").start();
+    }
+    private void pickBackup(boolean restore){
+        if(restore){new AlertDialog.Builder(this).setTitle("Yedekten geri yükle").setMessage("Seçtiğin yedek, bu cihazdaki bütün araç kayıtlarının yerini alır. Önce mevcut kayıtlarını yedekleyebilirsin.").setNegativeButton("Vazgeç",null).setPositiveButton("Yedek seç",(d,w)->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,IMPORT_BACKUP);}).show();}
+        else{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Arac-Defteri-"+java.time.LocalDate.now()+".zip");startActivityForResult(i,EXPORT_BACKUP);}
+    }
+    private void runBackup(boolean restore,Uri uri){
+        runWork(restore?"Yedek kontrol ediliyor ve geri yükleniyor…":"Kayıtlar ve fotoğraflar yedekleniyor…",()->{if(restore)BackupManager.restore(this,db,uri);else BackupManager.exportTo(this,db,uri);},()->{
+            prefs=VehiclePreferences.open(this,db.activeId());cvPhotoUris.clear();ReminderScheduler.rescheduleAll(this,db);resolveTheme();renderShell();renderPage(0);toast(restore?"Yedek geri yüklendi":"Yedek dosyası kaydedildi");
+        });
+    }
+
 }

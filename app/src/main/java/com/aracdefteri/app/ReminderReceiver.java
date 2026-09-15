@@ -1,58 +1,24 @@
 package com.aracdefteri.app;
 
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
+import android.app.*;
+import android.content.*;
+import android.database.Cursor;
 
 public class ReminderReceiver extends BroadcastReceiver {
-    public static final String CHANNEL_ID = "vehicle_reminders_v2";
-
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        String title = intent.getStringExtra("title");
-        String text = intent.getStringExtra("text");
-        int notificationId = intent.getIntExtra("notification_id", (int) (System.currentTimeMillis() % 100000));
-        if (title == null) title = "Araç Defteri hatırlatması";
-        if (text == null) text = "Yaklaşan bir araç işlemin var.";
-
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "Araç hatırlatmaları",
-                    NotificationManager.IMPORTANCE_HIGH
-            );
-            channel.setDescription("Bakım, sigorta, muayene, vergi ve diğer araç hatırlatmaları");
-            channel.enableVibration(true);
-            manager.createNotificationChannel(channel);
+    public static final String CHANNEL_ID="vehicle_reminders_v2";
+    @Override public void onReceive(Context c,Intent intent){
+        long id=intent.getLongExtra("record_id",-1);if(id<0)return;
+        try(AppDatabase db=new AppDatabase(c);Cursor row=db.getReadableDatabase().rawQuery("SELECT r.title,r.type,r.status,r.completed,r.next_date,v.archived,v.brand,v.model FROM records r JOIN vehicle v ON v.id=r.vehicle_id WHERE r.id=?",new String[]{""+id})){
+            if(!row.moveToFirst()||row.getInt(3)!=0||row.getInt(5)!=0)return;
+            AppDatabase.Record r=new AppDatabase.Record();r.type=row.getString(1);r.status=row.getString(2);if(!RecordRules.pending(r))return;
+            long days=RecordRules.days(row.getString(4));if(days<0||days>7)return;
+            show(c,(int)id,row.getString(6)+" "+row.getString(7)+" • "+row.getString(0),days==0?"Bugün zamanı geldi":days+" gün kaldı",id);
         }
-
-        Intent open = new Intent(context, NextMainActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent pending = PendingIntent.getActivity(
-                context,
-                0,
-                open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new android.app.Notification.Builder(context, CHANNEL_ID)
-                : new android.app.Notification.Builder(context);
-
-        builder.setSmallIcon(com.aracdefteri.app.R.drawable.ic_launcher)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setStyle(new android.app.Notification.BigTextStyle().bigText(text))
-                .setAutoCancel(true)
-                .setContentIntent(pending);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            builder.setPriority(android.app.Notification.PRIORITY_HIGH);
-        }
-        manager.notify(notificationId, builder.build());
+    }
+    static boolean show(Context c,int id,String title,String message,long recordId){
+        ReminderScheduler.ensureChannel(c);NotificationManager nm=c.getSystemService(NotificationManager.class);if(!nm.areNotificationsEnabled())return false;
+        Intent open=new Intent(c,NextMainActivity.class).putExtra("record_id",recordId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pending=PendingIntent.getActivity(c,id,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        try{nm.notify(id,new Notification.Builder(c,CHANNEL_ID).setSmallIcon(R.drawable.ic_launcher).setContentTitle(title).setContentText(message).setStyle(new Notification.BigTextStyle().bigText(message)).setContentIntent(pending).setAutoCancel(true).build());return true;}catch(SecurityException e){return false;}
     }
 }

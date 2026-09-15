@@ -59,7 +59,8 @@ public final class VehicleCvPdf {
         w.headerTitle = fullVehicleName(vehicle, prefs);
         try {
             drawCover(activity, w, vehicle, prefs, documentNo, showPlate);
-            drawHistory(w, db, showCosts);
+            drawHistory(w, db, prefs, showCosts);
+            if(prefs.getBoolean("cv_attachments",false))drawRecordMedia(activity,w,db,prefs);
             drawPhotos(activity, w, selectedPhotos);
             w.finish();
 
@@ -180,10 +181,12 @@ public final class VehicleCvPdf {
         }
     }
 
-    private static void drawHistory(Writer w, AppDatabase db, boolean showCosts) {
-        List<AppDatabase.Record> all = db.getRecords(500);
-        String[] types = {"Bakım", "Hasar", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};
-        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
+    private static void drawHistory(Writer w, AppDatabase db, SharedPreferences prefs, boolean showCosts) {
+        List<AppDatabase.Record> all = db.getRecords(Integer.MAX_VALUE);
+        java.util.Set<String> excluded=new java.util.HashSet<>(java.util.Arrays.asList(prefs.getString("cv_excluded", "").split(",")));
+        all.removeIf(r->excluded.contains(""+r.id));
+        String[] types = {"Bakım", "Hasar", "Ekspertiz", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt", "Lastik"};
+        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Ekspertiz", "Muayene / Egzoz Emisyon", "Sigorta & Kasko", "MTV / Vergi", "Yakıt / Şarj", "Lastik"};
         for (int i = 0; i < types.length; i++) {
             List<AppDatabase.Record> group = recordsOfType(all, types[i]);
             if (group.isEmpty()) continue;
@@ -191,6 +194,20 @@ public final class VehicleCvPdf {
             w.y += 3;
             w.section(titles[i], null);
             for (AppDatabase.Record r : group) w.recordCard(r, showCosts);
+        }
+    }
+
+    private static void drawRecordMedia(Activity activity,Writer w,AppDatabase db,SharedPreferences prefs){
+        java.util.Set<String> excluded=new java.util.HashSet<>(java.util.Arrays.asList(prefs.getString("cv_excluded", "").split(",")));
+        for(AppDatabase.Record r:db.getRecords(Integer.MAX_VALUE)){
+            if(excluded.contains(""+r.id))continue;
+            for(AppDatabase.Attachment a:db.attachments(r.id)){
+                if(a.uri.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf"))continue;
+                Bitmap bitmap=loadBitmap(activity,Uri.parse(a.uri),1600);if(bitmap==null)continue;
+                w.ensure(240);w.section("Kayıt fotoğrafı",null);
+                w.y=w.drawWrapped(r.title+" • "+a.label,Writer.LEFT,w.y,8f,Writer.DARK,true,Writer.CONTENT_W,11);
+                w.ensure(170);w.drawImageFit(bitmap,Writer.LEFT,w.y,Writer.CONTENT_W,150);w.y+=166;bitmap.recycle();
+            }
         }
     }
 
@@ -246,7 +263,7 @@ public final class VehicleCvPdf {
         if (dir == null) throw new Exception("Belge klasörü bulunamadı");
         File file = new File(dir, fileName);
         try (OutputStream out = new FileOutputStream(file)) { document.writeTo(out); }
-        return Uri.fromFile(file);
+        return MediaFiles.uri(activity,file);
     }
 
     private static List<AppDatabase.Record> recordsOfType(List<AppDatabase.Record> all, String type) {
@@ -476,23 +493,24 @@ public final class VehicleCvPdf {
         }
 
         void recordCard(AppDatabase.Record r, boolean showCosts) {
-            String meta = r.date + " • " + formatInt(r.km) + " km";
-            if (!r.subtype.isEmpty()) meta += " • " + r.subtype;
-            if (showCosts && r.cost > 0) meta += " • " + formatMoney(r.cost);
-            String detail = r.detail == null ? "" : r.detail.trim();
-            String next = "";
-            if (!r.nextDate.isEmpty() || r.nextKm > 0) next = "Sonraki: " + joinNonEmpty(" • ", r.nextDate, r.nextKm > 0 ? formatInt(r.nextKm) + " km" : "");
-            int detailH = detail.isEmpty() ? 0 : measuredWrappedHeight(detail, 7.3f, CONTENT_W - 24) + 3;
-            int h = 43 + detailH + (next.isEmpty() ? 0 : 11);
-            ensure(h + 5);
-            paint.setColor(0xFFF7FAF9);
-            canvas.drawRoundRect(new RectF(LEFT, y, RIGHT, y + h), 8, 8, paint);
-            text(r.title, LEFT + 12, y + 15, 9f, DARK, true);
-            text(meta, LEFT + 12, y + 28, 6.6f, MUTED, false);
-            int yy = y + 38;
-            if (!detail.isEmpty()) yy = drawWrapped(detail, LEFT + 12, yy, 7.3f, DARK, false, CONTENT_W - 24, 9) + 2;
-            if (!next.isEmpty()) text(next, LEFT + 12, yy + 7, 6.8f, ACCENT_DARK, true);
-            y += h + 5;
+            ensure(50);
+            y=drawWrapped(r.title,LEFT,y+10,9f,DARK,true,CONTENT_W,13);
+            String meta=r.date+" • "+formatInt(r.km)+" km";
+            if(!r.subtype.isEmpty())meta+=" • "+r.subtype;
+            if(showCosts&&r.cost>0)meta+=" • "+formatMoney(r.cost);
+            y=drawWrapped(meta,LEFT,y+2,7f,MUTED,false,CONTENT_W,11);
+            if(!r.detail.isEmpty())y=drawWrapped(r.detail,LEFT,y+2,7.5f,DARK,false,CONTENT_W,11);
+            if("Bakım".equals(r.type)&&!r.extra.isEmpty())y=drawWrapped("Değişen parçalar: "+r.extra.replace('|',','),LEFT,y+2,7.5f,DARK,false,CONTENT_W,11);
+            try{
+                org.json.JSONObject data=new org.json.JSONObject(r.metadata);
+                String[] keys={"service","inspection_kind","tax_year","installment","company","tyre_brand","tyre_size"};
+                String[] labels={"Servis","İşlem","Yıl","Taksit","Şirket","Lastik","Ebat"};
+                for(int i=0;i<keys.length;i++)if(!data.optString(keys[i],"").isEmpty())y=drawWrapped(labels[i]+": "+data.optString(keys[i]),LEFT,y+2,7.5f,DARK,false,CONTENT_W,11);
+                String[] parts={"Ön tampon","Arka tampon","Kaput","Tavan","Bagaj kapağı","Sol ön çamurluk","Sağ ön çamurluk","Sol arka çamurluk","Sağ arka çamurluk","Sol ön kapı","Sağ ön kapı","Sol arka kapı","Sağ arka kapı"};
+                for(int i=0;i<parts.length;i++){String state=data.optString("body_"+i,"");if(!state.isEmpty()&&!state.equals("Belirtilmedi"))y=drawWrapped(parts[i]+": "+state,LEFT,y+2,7.5f,DARK,false,CONTENT_W,11);}
+            }catch(Exception ignored){}
+            if(!r.completed&&(!r.nextDate.isEmpty()||r.nextKm>0))y=drawWrapped("Sonraki: "+joinNonEmpty(" • ",r.nextDate,r.nextKm>0?formatInt(r.nextKm)+" km":""),LEFT,y+3,7f,ACCENT_DARK,false,CONTENT_W,11);
+            y+=12;
         }
 
         void simpleCard(String title, String subtitle, String right) {
@@ -542,33 +560,19 @@ public final class VehicleCvPdf {
         }
 
         int drawWrapped(String value, int x, int startY, float size, int color, boolean bold, int maxWidth, int lineHeight) {
-            if (value == null || value.trim().isEmpty()) return startY;
-            paint.setTextSize(size);
-            paint.setTypeface(Typeface.create(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL));
-            paint.setColor(color);
-            int yy = startY;
-            for (String paragraph : value.replace('\n', ' ').trim().split("\\s+")) {
-                // handled below through token buffer
-            }
-            String[] words = value.replace('\n', ' ').trim().split("\\s+");
-            StringBuilder line = new StringBuilder();
-            for (String word : words) {
-                String candidate = line.length() == 0 ? word : line + " " + word;
-                if (paint.measureText(candidate) <= maxWidth || line.length() == 0) {
-                    line.setLength(0);
-                    line.append(candidate);
-                } else {
-                    canvas.drawText(line.toString(), x, yy, paint);
-                    yy += lineHeight;
-                    line.setLength(0);
-                    line.append(word);
+            if(value==null||value.trim().isEmpty())return startY;
+            int yy=startY;
+            for(String paragraph:value.split("\\n",-1)){
+                String rest=paragraph;
+                if(rest.isEmpty()){yy+=lineHeight;continue;}
+                while(!rest.isEmpty()){
+                    if(yy+lineHeight>790){newPage(true);yy=y;}
+                    paint.setTextSize(size);paint.setTypeface(Typeface.create(Typeface.DEFAULT,bold?Typeface.BOLD:Typeface.NORMAL));paint.setColor(color);
+                    int count=paint.breakText(rest,true,maxWidth,null);if(count<=0)count=1;
+                    if(count<rest.length()){int space=rest.lastIndexOf(' ',count);if(space>0)count=space;}
+                    canvas.drawText(rest.substring(0,count),x,yy,paint);yy+=lineHeight;rest=rest.substring(count).trim();
                 }
-            }
-            if (line.length() > 0) {
-                canvas.drawText(line.toString(), x, yy, paint);
-                yy += lineHeight;
-            }
-            return yy;
+            }return yy;
         }
 
         int measuredWrappedHeight(String value, float size, int maxWidth) {
