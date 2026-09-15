@@ -1,0 +1,186 @@
+name: Apply Taşıtım v0.9.0 damage photos
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/apply-v090-tasitim-damage-photos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.9.0 changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # ---------- AppDatabase: multiple photos per damage record ----------
+          p = Path('app/src/main/java/com/aracdefteri/app/AppDatabase.java')
+          s = p.read_text()
+          s = s.replace('private static final int DB_VERSION = 2;', 'private static final int DB_VERSION = 3;', 1)
+
+          marker = '''    public static class Photo {\n        public long id;\n        public String uri = "", date = "";\n    }\n'''
+          replacement = marker + '''\n    public static class RecordPhoto {\n        public long id, recordId;\n        public String uri = "", date = "";\n    }\n'''
+          assert marker in s, 'Photo class marker missing'
+          s = s.replace(marker, replacement, 1)
+
+          marker = '''        db.execSQL("CREATE TABLE photos (id INTEGER PRIMARY KEY AUTOINCREMENT, uri TEXT, date TEXT)");\n'''
+          replacement = marker + '''        db.execSQL("CREATE TABLE record_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL, uri TEXT NOT NULL, date TEXT DEFAULT '')");\n        db.execSQL("CREATE INDEX idx_record_photos_record_id ON record_photos(record_id)");\n'''
+          assert marker in s, 'onCreate photos table marker missing'
+          s = s.replace(marker, replacement, 1)
+
+          marker = '''        if (oldVersion < 2) {\n            addColumn(db, "vehicle", "fuel_type", "TEXT DEFAULT 'Benzin'");\n            addColumn(db, "records", "subtype", "TEXT DEFAULT ''");\n            addColumn(db, "records", "quantity", "REAL DEFAULT 0");\n            addColumn(db, "records", "unit", "TEXT DEFAULT ''");\n            addColumn(db, "records", "unit_price", "REAL DEFAULT 0");\n            addColumn(db, "records", "status", "TEXT DEFAULT ''");\n            addColumn(db, "records", "extra", "TEXT DEFAULT ''");\n        }\n'''
+          replacement = marker + '''        if (oldVersion < 3) {\n            db.execSQL("CREATE TABLE IF NOT EXISTS record_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL, uri TEXT NOT NULL, date TEXT DEFAULT '')");\n            db.execSQL("CREATE INDEX IF NOT EXISTS idx_record_photos_record_id ON record_photos(record_id)");\n        }\n'''
+          assert marker in s, 'onUpgrade v2 marker missing'
+          s = s.replace(marker, replacement, 1)
+
+          old = '''    public void deleteRecord(long id) {\n        getWritableDatabase().delete("records", "id=?", new String[]{String.valueOf(id)});\n    }\n'''
+          new = '''    public void deleteRecord(long id) {\n        SQLiteDatabase w = getWritableDatabase();\n        w.delete("record_photos", "record_id=?", new String[]{String.valueOf(id)});\n        w.delete("records", "id=?", new String[]{String.valueOf(id)});\n    }\n'''
+          assert old in s, 'deleteRecord marker missing'
+          s = s.replace(old, new, 1)
+
+          marker = '''    public List<Photo> getPhotos() {\n        List<Photo> out = new ArrayList<>();\n        Cursor c = getReadableDatabase().rawQuery("SELECT id,uri,date FROM photos ORDER BY id DESC", null);\n        while(c.moveToNext()) { Photo p=new Photo(); p.id=c.getLong(0); p.uri=nz(c.getString(1)); p.date=nz(c.getString(2)); out.add(p); }\n        c.close(); return out;\n    }\n'''
+          addition = marker + '''\n    public long addRecordPhoto(long recordId, String uri, String date) {\n        ContentValues v = new ContentValues();\n        v.put("record_id", recordId); v.put("uri", uri); v.put("date", date);\n        return getWritableDatabase().insert("record_photos", null, v);\n    }\n\n    public void deleteRecordPhoto(long id) {\n        getWritableDatabase().delete("record_photos", "id=?", new String[]{String.valueOf(id)});\n    }\n\n    public int countRecordPhotos(long recordId) {\n        Cursor c = getReadableDatabase().rawQuery("SELECT COUNT(*) FROM record_photos WHERE record_id=?", new String[]{String.valueOf(recordId)});\n        c.moveToFirst(); int n = c.getInt(0); c.close(); return n;\n    }\n\n    public List<RecordPhoto> getRecordPhotos(long recordId) {\n        List<RecordPhoto> out = new ArrayList<>();\n        Cursor c = getReadableDatabase().rawQuery("SELECT id,record_id,uri,date FROM record_photos WHERE record_id=? ORDER BY id ASC", new String[]{String.valueOf(recordId)});\n        while (c.moveToNext()) {\n            RecordPhoto photo = new RecordPhoto();\n            photo.id = c.getLong(0); photo.recordId = c.getLong(1); photo.uri = nz(c.getString(2)); photo.date = nz(c.getString(3));\n            out.add(photo);\n        }\n        c.close(); return out;\n    }\n'''
+          assert marker in s, 'getPhotos marker missing'
+          s = s.replace(marker, addition, 1)
+          p.write_text(s)
+
+          # ---------- NextMainActivity: damage photo UI + Taşıtım branding ----------
+          p = Path('app/src/main/java/com/aracdefteri/app/NextMainActivity.java')
+          s = p.read_text()
+          s = s.replace('private static final int PICK_CV_IMAGES = 3104;', 'private static final int PICK_CV_IMAGES = 3104;\n    private static final int PICK_DAMAGE_IMAGES = 3105;', 1)
+          s = s.replace('private long pendingAttachmentRecordId = -1;', 'private long pendingAttachmentRecordId = -1;\n    private long pendingDamagePhotoRecordId = -1;', 1)
+          s = s.replace('addHeader(content, "Araç Defteri", "Aracının dijital hafızası");', 'addHeader(content, "Taşıtım", "Taşıtının dijital hafızası");', 1)
+
+          marker = '''        content.addView(hero);\n        gap(content, 14);\n\n        LinearLayout actions = new LinearLayout(this);\n'''
+          replacement = '''        content.addView(hero);\n        gap(content, 14);\n\n        if ("Hasar".equals(r.type)) {\n            renderDamagePhotos(content, r);\n            gap(content, 14);\n        }\n\n        LinearLayout actions = new LinearLayout(this);\n'''
+          assert marker in s, 'record detail marker missing'
+          s = s.replace(marker, replacement, 1)
+
+          marker = '''    private static class FormRefs {\n'''
+          helpers = '''    private void renderDamagePhotos(LinearLayout content, AppDatabase.Record record) {\n        List<AppDatabase.RecordPhoto> photos = db.getRecordPhotos(record.id);\n        sectionTitle(content, "Hasar fotoğrafları", "Kaza / hasar öncesi ve sonrası fotoğrafları • en fazla 10");\n\n        if (!photos.isEmpty()) {\n            android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(this);\n            scroll.setHorizontalScrollBarEnabled(false);\n            LinearLayout row = new LinearLayout(this);\n            row.setOrientation(LinearLayout.HORIZONTAL);\n            for (AppDatabase.RecordPhoto photo : photos) row.addView(damagePhotoThumb(record.id, photo));\n            scroll.addView(row);\n            content.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(106)));\n            gap(content, 9);\n        } else {\n            content.addView(infoCard("Henüz hasar fotoğrafı yok", "Fotoğrafları bu hasar kaydına bağlayabilirsin. Araç CV'de de hasarla birlikte görünür.", moduleColor("Hasar")));\n            gap(content, 9);\n        }\n\n        Button add = secondaryButton(photos.size() >= 10 ? "10 fotoğraf sınırına ulaşıldı" : "+ Hasar fotoğrafı ekle (" + photos.size() + "/10)");\n        add.setEnabled(photos.size() < 10);\n        add.setOnClickListener(v -> pickDamageImages(record.id));\n        content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));\n    }\n\n    private View damagePhotoThumb(long recordId, AppDatabase.RecordPhoto photo) {\n        FrameLayout frame = new FrameLayout(this);\n        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(dp(112), dp(98));\n        fp.setMargins(0, 0, dp(9), 0);\n        frame.setLayoutParams(fp);\n\n        ImageView image = new ImageView(this);\n        image.setScaleType(ImageView.ScaleType.CENTER_CROP);\n        image.setBackground(cardDrawable(surface2, dp(13), stroke));\n        try { image.setImageURI(Uri.parse(photo.uri)); } catch (Exception ignored) { }\n        image.setOnClickListener(v -> openAttachment(photo.uri));\n        frame.addView(image, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));\n\n        TextView remove = tv("×", Color.WHITE, 18, true);\n        remove.setGravity(Gravity.CENTER);\n        remove.setBackground(cardDrawable(Color.argb(220, 28, 35, 35), dp(14), Color.TRANSPARENT));\n        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(dp(29), dp(29));\n        rp.gravity = Gravity.TOP | Gravity.RIGHT;\n        rp.setMargins(0, dp(5), dp(5), 0);\n        frame.addView(remove, rp);\n        remove.setOnClickListener(v -> new AlertDialog.Builder(this)\n                .setTitle("Fotoğraf silinsin mi?")\n                .setMessage("Fotoğraf bu hasar kaydından kaldırılacak.")\n                .setNegativeButton("Vazgeç", null)\n                .setPositiveButton("Sil", (d, w) -> {\n                    db.deleteRecordPhoto(photo.id);\n                    openRecordDetail(recordId);\n                }).show());\n        return frame;\n    }\n\n''' + marker
+          assert marker in s, 'FormRefs marker missing'
+          s = s.replace(marker, helpers, 1)
+
+          marker = '''    private void pickRecordAttachment(long id) {\n'''
+          helper = '''    private void pickDamageImages(long recordId) {\n        int current = db.countRecordPhotos(recordId);\n        if (current >= 10) { toast("Bir hasar kaydına en fazla 10 fotoğraf ekleyebilirsin"); return; }\n        pendingDamagePhotoRecordId = recordId;\n        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);\n        i.addCategory(Intent.CATEGORY_OPENABLE);\n        i.setType("image/*");\n        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);\n        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);\n        startActivityForResult(Intent.createChooser(i, "Hasar fotoğraflarını seç"), PICK_DAMAGE_IMAGES);\n    }\n\n''' + marker
+          assert marker in s, 'pickRecordAttachment marker missing'
+          s = s.replace(marker, helper, 1)
+
+          marker = '''        if (data.getData() == null) return;\n        Uri uri=data.getData();\n'''
+          replacement = '''        if (requestCode == PICK_DAMAGE_IMAGES && pendingDamagePhotoRecordId >= 0) {\n            long recordId = pendingDamagePhotoRecordId;\n            pendingDamagePhotoRecordId = -1;\n            int available = Math.max(0, 10 - db.countRecordPhotos(recordId));\n            int added = 0;\n            int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);\n            android.content.ClipData clip = data.getClipData();\n            if (clip != null) {\n                for (int i = 0; i < clip.getItemCount() && added < available; i++) {\n                    Uri u = clip.getItemAt(i).getUri();\n                    if (u == null) continue;\n                    try { getContentResolver().takePersistableUriPermission(u, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) { }\n                    db.addRecordPhoto(recordId, u.toString(), today());\n                    added++;\n                }\n                if (clip.getItemCount() > available) toast("İlk " + available + " fotoğraf eklendi; sınır 10");\n            } else if (data.getData() != null && available > 0) {\n                Uri u = data.getData();\n                try { getContentResolver().takePersistableUriPermission(u, flags & Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Exception ignored) { }\n                db.addRecordPhoto(recordId, u.toString(), today());\n                added = 1;\n            }\n            if (added > 0) toast(added + " hasar fotoğrafı eklendi");\n            openRecordDetail(recordId);\n            return;\n        }\n\n        if (data.getData() == null) return;\n        Uri uri=data.getData();\n'''
+          assert marker in s, 'onActivityResult marker missing'
+          s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          # ---------- PDF: Taşıtım brand + compact damage photo grids ----------
+          p = Path('app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java')
+          s = p.read_text()
+          s = s.replace('/** Modern, markalı ve güvenli Araç Defteri CV PDF üreticisi. */', '/** Taşıtım araç geçmişi / CV PDF üreticisi. */', 1)
+          s = s.replace('drawHistory(w, db, showCosts);', 'drawHistory(activity, w, db, showCosts);', 1)
+          s = s.replace('String fileName = "Arac-Defteri-CV-" + documentNo.replace("-", "") + ".pdf";', 'String fileName = "Tasitim-CV-" + documentNo.replace("-", "") + ".pdf";', 1)
+          s = s.replace('w.text("ARAÇ DEFTERİ", 63, 31, 8.4f, Color.WHITE, true);', 'w.text("TAŞITIM", 63, 31, 8.4f, Color.WHITE, true);', 1)
+          s = s.replace('values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/AracDefteri");', 'values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Tasitim");', 1)
+          s = s.replace('text("ARAÇ DEFTERİ", LEFT + 23, 34, 7.8f, ACCENT, true);', 'text("TAŞITIM", LEFT + 23, 34, 7.8f, ACCENT, true);', 1)
+          s = s.replace('text("Araç Defteri • Belge No: " + documentNo, LEFT, 820, 6.5f, MUTED, false);', 'text("Taşıtım • Belge No: " + documentNo, LEFT, 820, 6.5f, MUTED, false);', 1)
+
+          old = '''    private static void drawHistory(Writer w, AppDatabase db, boolean showCosts) {\n        List<AppDatabase.Record> all = db.getRecords(500);\n        String[] types = {"Bakım", "Hasar", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};\n        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};\n        for (int i = 0; i < types.length; i++) {\n            List<AppDatabase.Record> group = recordsOfType(all, types[i]);\n            if (group.isEmpty()) continue;\n            w.ensure(70);\n            w.y += 3;\n            w.section(titles[i], null);\n            for (AppDatabase.Record r : group) w.recordCard(r, showCosts);\n        }\n    }\n'''
+          new = '''    private static void drawHistory(Activity activity, Writer w, AppDatabase db, boolean showCosts) {\n        List<AppDatabase.Record> all = db.getRecords(500);\n        String[] types = {"Bakım", "Hasar", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};\n        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};\n        for (int i = 0; i < types.length; i++) {\n            List<AppDatabase.Record> group = recordsOfType(all, types[i]);\n            if (group.isEmpty()) continue;\n            w.ensure(70);\n            w.y += 3;\n            w.section(titles[i], null);\n            for (AppDatabase.Record r : group) {\n                w.recordCard(r, showCosts);\n                if ("Hasar".equals(r.type)) drawDamagePhotos(activity, w, db.getRecordPhotos(r.id));\n            }\n        }\n    }\n\n    private static void drawDamagePhotos(Activity activity, Writer w, List<AppDatabase.RecordPhoto> photos) {\n        if (photos == null || photos.isEmpty()) return;\n        w.ensure(28);\n        w.label("HASAR FOTOĞRAFLARI • " + photos.size());\n        final int gap = 9;\n        final int cellW = (Writer.CONTENT_W - gap) / 2;\n        final int cellH = 105;\n        for (int i = 0; i < photos.size(); i += 2) {\n            w.ensure(cellH + 10);\n            for (int col = 0; col < 2 && i + col < photos.size(); col++) {\n                Bitmap bitmap = loadBitmap(activity, Uri.parse(photos.get(i + col).uri), 1200);\n                if (bitmap == null) continue;\n                int x = Writer.LEFT + col * (cellW + gap);\n                w.drawImageFit(bitmap, x, w.y, cellW, cellH);\n                bitmap.recycle();\n            }\n            w.y += cellH + 9;\n        }\n        w.y += 2;\n    }\n'''
+          assert old in s, 'drawHistory marker missing'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # ---------- Visible app name ----------
+          p = Path('app/src/main/AndroidManifest.xml')
+          s = p.read_text().replace('android:label="Araç Defteri"', 'android:label="Taşıtım"', 1)
+          p.write_text(s)
+
+          # ---------- Version ----------
+          p = Path('app/build.gradle')
+          s = p.read_text()
+          s = s.replace('versionCode 11', 'versionCode 12', 1)
+          s = s.replace("versionName '0.8.3-cv-layout-fix-dev'", "versionName '0.9.0-damage-photos-dev'", 1)
+          p.write_text(s)
+
+          # ---------- README ----------
+          p = Path('README.md')
+          p.write_text('''# Taşıtım\n\nTaşıtının dijital hafızası için geliştirilen Android uygulaması. Repo adı geriye dönük olarak Ara-Defteri kalabilir; kullanıcıya görünen ürün adı **Taşıtım**dır.\n\n## Güncel demo kapsamı\n- Açık / koyu / sistem teması\n- Araç profili, teknik katalog bilgileri ve kilometre\n- Bakım / onarım kayıtları ve değişen parçalar\n- Hasar kayıtları ve her hasar kaydına bağlı **10 adede kadar fotoğraf**\n- Hasar fotoğraflarının Araç CV PDF'ine eklenmesi\n- Ekspertiz kayıtları ve belge eki\n- Sigorta / kasko, muayene ve vergi kayıtları\n- Yakıt ve diğer gider kayıtları\n- 7 gün ve 1 gün kala bildirimler\n- Kompakt, numaralı Araç CV PDF üretimi\n- Cihaz içi SQLite veri saklama\n\nBu depo kişisel veri içermez. İlk kurulumdaki örnek araç ve geçmiş kayıtları yalnızca demo verisidir.\n''')
+
+          # ---------- Main build workflow branding ----------
+          p = Path('.github/workflows/build-apk.yml')
+          s = p.read_text()
+          s = s.replace('name: Build Araç Defteri APK', 'name: Build Taşıtım APK', 1)
+          s = s.replace('Arac-Defteri-Demo.apk', 'Tasitim-Demo.apk')
+          s = s.replace('name: Arac-Defteri-Demo', 'name: Tasitim-Demo')
+          s = s.replace('Araç Defteri Demo ${GITHUB_RUN_NUMBER}', 'Taşıtım Demo ${GITHUB_RUN_NUMBER}')
+          s = s.replace('Otomatik oluşturulan demo APK.', 'Otomatik oluşturulan Taşıtım demo APK.')
+          p.write_text(s)
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses and install SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Prepare deliverables
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "Tasitim-v0.9.0-damage-photos-dev.apk"
+          zip -qr "Tasitim-v0.9.0-source.zip" . \
+            -x '.git/*' 'app/build/*' '.gradle/*' '*.apk' '*.zip'
+
+      - name: Commit source changes
+        run: |
+          git config user.name "Taşıtım Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/AppDatabase.java \
+                  app/src/main/java/com/aracdefteri/app/NextMainActivity.java \
+                  app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java \
+                  app/src/main/AndroidManifest.xml app/build.gradle README.md \
+                  .github/workflows/build-apk.yml
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "Add Taşıtım branding and multi-photo damage records"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tasitim-v0.9.0-damage-photos-dev-apk
+          path: Tasitim-v0.9.0-damage-photos-dev.apk
+
+      - name: Upload source ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tasitim-v0.9.0-source
+          path: Tasitim-v0.9.0-source.zip
