@@ -208,7 +208,7 @@ public class AppDatabase extends SQLiteOpenHelper {
     }
 
     public void updateRecord(Record r) {
-        getWritableDatabase().update("records", recordValues(r, true), "id=?", new String[]{String.valueOf(r.id)});
+        getWritableDatabase().update("records", recordValues(r, true), "id=? AND vehicle_id=?", new String[]{String.valueOf(r.id),""+activeId()});
     }
 
     private ContentValues recordValues(Record r, boolean keepAttachment) {
@@ -230,12 +230,14 @@ public class AppDatabase extends SQLiteOpenHelper {
     }
 
     public void deleteRecord(long id) {
-        getWritableDatabase().delete("records", "id=?", new String[]{String.valueOf(id)});
+        if(getRecord(id)==null)return;
+        getWritableDatabase().delete("attachments","record_id=?",new String[]{""+id});
+        getWritableDatabase().delete("records", "id=? AND vehicle_id=?", new String[]{String.valueOf(id),""+activeId()});
     }
 
     public void setRecordAttachment(long id, String uri) {
         ContentValues v = new ContentValues(); v.put("attachment", uri);
-        getWritableDatabase().update("records", v, "id=?", new String[]{String.valueOf(id)});
+        getWritableDatabase().update("records", v, "id=? AND vehicle_id=?", new String[]{String.valueOf(id),""+activeId()});
     }
 
     public List<Record> getRecords(int limit) {
@@ -280,11 +282,11 @@ public class AppDatabase extends SQLiteOpenHelper {
 
     public void updateExpense(Expense e) {
         ContentValues v = new ContentValues(); v.put("category", e.category); v.put("date", e.date); v.put("amount", e.amount); v.put("note", e.note);
-        getWritableDatabase().update("expenses", v, "id=?", new String[]{String.valueOf(e.id)});
+        getWritableDatabase().update("expenses", v, "id=? AND vehicle_id=?", new String[]{String.valueOf(e.id),""+activeId()});
     }
 
     public void deleteExpense(long id) {
-        getWritableDatabase().delete("expenses", "id=?", new String[]{String.valueOf(id)});
+        getWritableDatabase().delete("expenses", "id=? AND vehicle_id=?", new String[]{String.valueOf(id),""+activeId()});
     }
 
     public List<Expense> getExpenses() {
@@ -317,7 +319,7 @@ public class AppDatabase extends SQLiteOpenHelper {
         ContentValues v = new ContentValues(); v.put("vehicle_id",activeId()); v.put("uri", uri); v.put("date", date); getWritableDatabase().insert("photos", null, v);
     }
 
-    public void deletePhoto(long id) { getWritableDatabase().delete("photos", "id=?", new String[]{String.valueOf(id)}); }
+    public void deletePhoto(long id) { getWritableDatabase().delete("photos", "id=? AND vehicle_id=?", new String[]{String.valueOf(id),""+activeId()}); }
 
     public List<Photo> getPhotos() {
         List<Photo> out = new ArrayList<>();

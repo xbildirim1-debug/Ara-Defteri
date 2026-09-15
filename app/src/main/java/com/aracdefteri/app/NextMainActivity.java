@@ -459,12 +459,6 @@ private void renderPage(int page) {
         edit.setOnClickListener(v -> openRecordForm(currentModule, r));
         actions.addView(edit, new LinearLayout.LayoutParams(0, dp(48), 1f));
         gapHorizontal(actions, 8);
-        Button attachment = secondaryButton(r.attachment.isEmpty() ? "Belge ekle" : "Belgeyi aç");
-        attachment.setOnClickListener(v -> {
-            if (r.attachment.isEmpty()) pickRecordAttachment(r.id);
-            else openAttachment(r.attachment);
-        });
-        actions.addView(attachment, new LinearLayout.LayoutParams(0, dp(48), 1f));
         content.addView(actions);
         gap(content, 9);
         Button delete = dangerButton("Kaydı sil");
@@ -707,6 +701,7 @@ private void renderPage(int page) {
         gap(content,14);
         Button save = primaryButton(existing == null ? "Gideri kaydet" : "Değişiklikleri kaydet");
         save.setOnClickListener(v -> {
+            if(!validDecimal(amount,false))return;
             double a = safeDouble(amount.getText().toString());
             if (a <= 0) { toast("Tutarı girmelisin"); return; }
             if (existing == null) db.addExpense(String.valueOf(category.getSelectedItem()), date.getValue(), a, note.getText().toString().trim());
@@ -1676,18 +1671,6 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
                 else db.addAttachment(record,local.toString(),label);
             },()->{if(request==PICK_RECORD_ATTACHMENT)openRecordDetail(record);else if(request==PICK_GALLERY_IMAGE)openModule("Galeri");else renderPage(0);});return;
         }
-        if(requestCode==PICK_VEHICLE_IMAGE) {
-            prefs.edit().putString("vehicle_photo_uri",uri.toString()).apply();
-            renderPage(0);
-        } else if(requestCode==PICK_GALLERY_IMAGE) {
-            db.addPhoto(uri.toString(),today());
-            renderPage(0);
-        } else if(requestCode==PICK_RECORD_ATTACHMENT&&pendingAttachmentRecordId>=0) {
-            db.setRecordAttachment(pendingAttachmentRecordId,uri.toString());
-            long id=pendingAttachmentRecordId;
-            pendingAttachmentRecordId=-1;
-            openRecordDetail(id);
-        }
     }
 
     private boolean addCvPhotoUri(Uri uri) {
@@ -1923,7 +1906,9 @@ private void createVehiclePdf() {
         else{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"Arac-Defteri-"+java.time.LocalDate.now()+".zip");startActivityForResult(i,EXPORT_BACKUP);}
     }
     private void runBackup(boolean restore,Uri uri){
+        java.util.Set<String> previousAlarms=new java.util.HashSet<>(getSharedPreferences("garage",0).getStringSet("scheduled",new java.util.HashSet<>()));
         runWork(restore?"Yedek kontrol ediliyor ve geri yükleniyor…":"Kayıtlar ve fotoğraflar yedekleniyor…",()->{if(restore)BackupManager.restore(this,db,uri);else BackupManager.exportTo(this,db,uri);},()->{
+            if(restore)for(String id:previousAlarms)try{ReminderScheduler.cancel(this,Long.parseLong(id));}catch(NumberFormatException ignored){}
             prefs=VehiclePreferences.open(this,db.activeId());cvPhotoUris.clear();ReminderScheduler.rescheduleAll(this,db);resolveTheme();renderShell();renderPage(0);toast(restore?"Yedek geri yüklendi":"Yedek dosyası kaydedildi");
         });
     }

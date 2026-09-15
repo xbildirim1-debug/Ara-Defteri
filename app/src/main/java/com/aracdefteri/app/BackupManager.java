@@ -73,7 +73,7 @@ final class BackupManager {
         boolean swapped=false,success=false;
         try {
             long total=0;Set<String> seen=new HashSet<>();int files=0;
-            try(InputStream input=c.getContentResolver().openInputStream(source);ZipInputStream zip=new ZipInputStream(input)){
+            try(InputStream input=c.getContentResolver().openInputStream(source);ZipInputStream zip=new ZipInputStream(java.util.Objects.requireNonNull(input,"Yedek açılamadı"))){
                 ZipEntry e;while((e=zip.getNextEntry())!=null){
                     String name=e.getName();
                     if(++files>20000||!seen.add(name)||!(name.equals("manifest.json")||name.matches("media/[A-Za-z0-9._-]+")))throw new IOException("Geçersiz yedek içeriği");
@@ -96,7 +96,32 @@ final class BackupManager {
             names=prefs.keys();while(names.hasNext()){
                 JSONObject values=prefs.getJSONObject(names.next());JSONObject photo=values.optJSONObject("vehicle_photo_uri");if(photo!=null)checkMedia(c,stage,photo.optString("value",""));
             }
+            Map<String,Map<String,Object>> incomingPrefs=new LinkedHashMap<>();
+            Map<String,Map<String,?>> previousPrefs=new LinkedHashMap<>();
+            names=prefs.keys();while(names.hasNext()){
+                String name=names.next();Map<String,Object> parsed=new LinkedHashMap<>();JSONObject values=prefs.getJSONObject(name);Iterator<String> keys=values.keys();
+                while(keys.hasNext()){String key=keys.next();JSONObject item=values.getJSONObject(key);Object value=item.get("value");
+                    switch(item.getString("type")){
+                        case "Integer":value=((Number)value).intValue();break;
+                        case "Long":value=((Number)value).longValue();break;
+                        case "Float":value=((Number)value).floatValue();break;
+                        case "Boolean":if(!(value instanceof Boolean))throw new IOException("Geçersiz ayar");break;
+                        case "String":if(!(value instanceof String))throw new IOException("Geçersiz ayar");break;
+                        default:throw new IOException("Desteklenmeyen ayar türü");
+                    }parsed.put(key,value);
+                }incomingPrefs.put(name,parsed);previousPrefs.put(name,new LinkedHashMap<>(c.getSharedPreferences(name,0).getAll()));
+            }
+            for(AppDatabase.Vehicle existing:db.vehicles()){
+                String name="vehicle_"+existing.id;
+                if(!incomingPrefs.containsKey(name)){incomingPrefs.put(name,new LinkedHashMap<>());previousPrefs.put(name,new LinkedHashMap<>(c.getSharedPreferences(name,0).getAll()));}
+            }
+            if(!incomingPrefs.containsKey("garage"))throw new IOException("Garaj bilgisi eksik");
+            Object active=incomingPrefs.get("garage").get("active");boolean found=active==null||Integer.valueOf(0).equals(active);
+            JSONArray vehicles=tables.getJSONArray("vehicle");for(int i=0;i<vehicles.length();i++)if(Integer.valueOf(vehicles.getJSONObject(i).getInt("id")).equals(active))found=true;
+            if(!found)throw new IOException("Seçili araç yedekte bulunamadı");
             SQLiteDatabase w=db.getWritableDatabase();w.beginTransaction();
+            boolean committed=false;
+
             try{
                 for(String table:TABLES)w.delete(table,null,null);
                 for(String table:TABLES){
@@ -110,15 +135,28 @@ final class BackupManager {
                     }
                 }
                 for(String table:new String[]{"records","expenses","photos","odometer"})try(Cursor cur=w.rawQuery("SELECT COUNT(*) FROM "+table+" WHERE vehicle_id NOT IN (SELECT id FROM vehicle)",null)){cur.moveToFirst();if(cur.getInt(0)>0)throw new IOException("Yedekte araç ilişkisi eksik");}
+                try(Cursor cur=w.rawQuery("SELECT COUNT(*) FROM attachments WHERE record_id NOT IN (SELECT id FROM records)",null)){cur.moveToFirst();if(cur.getInt(0)>0)throw new IOException("Yedekte belge ilişkisi eksik");}
                 if(media.exists()&&!media.renameTo(old))throw new IOException("Mevcut fotoğraflar taşınamadı");
                 if(!stagedMedia.renameTo(media)){old.renameTo(media);throw new IOException("Fotoğraflar geri yüklenemedi");}
-                swapped=true;w.setTransactionSuccessful();
-            }finally{w.endTransaction();}
-            names=prefs.keys();while(names.hasNext()){
-                String name=names.next();SharedPreferences.Editor edit=c.getSharedPreferences(name,0).edit().clear();JSONObject values=prefs.getJSONObject(name);Iterator<String> keys=values.keys();
-                while(keys.hasNext()){String key=keys.next();JSONObject item=values.getJSONObject(key);Object val=item.get("value");
-                    switch(item.getString("type")){case "Integer":edit.putInt(key,((Number)val).intValue());break;case "Long":edit.putLong(key,((Number)val).longValue());break;case "Float":edit.putFloat(key,((Number)val).floatValue());break;case "Boolean":edit.putBoolean(key,(Boolean)val);break;default:edit.putString(key,val.toString());}
-                }if(!edit.commit())throw new IOException("Ayarlar geri yüklenemedi");
+                swapped=true;
+                for(Map.Entry<String,Map<String,Object>> group:incomingPrefs.entrySet()){
+                    SharedPreferences.Editor edit=c.getSharedPreferences(group.getKey(),0).edit().clear();
+                    for(Map.Entry<String,Object> e:group.getValue().entrySet())VehiclePreferences.put(edit,e.getKey(),e.getValue());
+                    if(!edit.commit())throw new IOException("Ayarlar kaydedilemedi");
+                }
+                w.setTransactionSuccessful();committed=true;
+            }finally{
+                w.endTransaction();
+                if(!committed){
+                    for(Map.Entry<String,Map<String,?>> group:previousPrefs.entrySet()){
+                        SharedPreferences.Editor edit=c.getSharedPreferences(group.getKey(),0).edit().clear();
+                        for(Map.Entry<String,?> e:group.getValue().entrySet()){
+                            if(e.getValue() instanceof Set)edit.putStringSet(e.getKey(),new HashSet<>((Set<String>)e.getValue()));
+                            else VehiclePreferences.put(edit,e.getKey(),e.getValue());
+                        }edit.commit();
+                    }
+                    if(swapped){deleteTree(media);old.renameTo(media);swapped=false;}
+                }
             }
             success=true;
         }finally{
