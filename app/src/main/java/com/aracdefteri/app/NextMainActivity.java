@@ -22,6 +22,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.speech.RecognizerIntent;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -62,6 +63,8 @@ public class NextMainActivity extends Activity {
     private static final int PICK_VEHICLE_IMAGE = 3103;
     private static final int PICK_CV_IMAGES = 3104;
     private static final int PICK_DAMAGE_IMAGES = 3105;
+    private static final int PICK_OCR_IMAGE = 3110;
+    private static final int CAPTURE_OCR_IMAGE = 3111;
 
     private AppDatabase db;
     private SharedPreferences prefs;
@@ -74,6 +77,9 @@ public class NextMainActivity extends Activity {
     private boolean dark;
     private final ArrayList<Uri> cvPhotoUris = new ArrayList<>();
     private TextView cvPhotoCountView;
+    private FormRefs pendingSmartForm;
+    private String pendingSmartModule;
+    private Uri pendingOcrCameraUri;
 
     private int bg, surface, surface2, text, muted, accent, accentSoft, warning, danger, stroke, success;
 
@@ -187,6 +193,8 @@ private void buildBottomNav() {
     }
 
 private void renderPage(int page) {
+        pendingSmartForm = null;
+        pendingSmartModule = null;
         currentPage = page;
         currentModule = null;
         selectedRecordId = -1;
@@ -199,6 +207,8 @@ private void renderPage(int page) {
     }
 
     private void openModule(String module) {
+        pendingSmartForm = null;
+        pendingSmartModule = null;
         currentPage = 1;
         currentModule = module;
         selectedRecordId = -1;
@@ -512,6 +522,7 @@ private void renderPage(int page) {
         Spinner subtype, status;
         ArrayList<CheckBox> parts = new ArrayList<>();
         CheckBox fullTank;
+        TextView smartStatus;
     }
 
     private void openRecordForm(String module, AppDatabase.Record existing) {
@@ -527,12 +538,16 @@ private void renderPage(int page) {
 
         AppDatabase.Vehicle vehicle = db.getVehicle();
         FormRefs f = new FormRefs();
+        pendingSmartForm = f;
+        pendingSmartModule = module;
         AppDatabase.Record base = existing == null ? new AppDatabase.Record() : existing;
         String initialTitle = existing == null ? defaultTitle(module) : base.title;
 
         LinearLayout form = card();
         form.setPadding(dp(16), dp(16), dp(16), dp(16));
         form.addView(formSection("Temel bilgiler", "Zorunlu alanları kısa tuttuk"));
+        form.addView(smartInputPanel(module, f));
+        gap(form, 12);
         f.title = formField(form, titleHint(module), initialTitle, InputType.TYPE_CLASS_TEXT);
         f.date = formDate(form, "Tarih", existing == null ? today() : base.date, false);
         f.km = formField(form, "Kilometre", existing == null ? String.valueOf(vehicle.km) : String.valueOf(base.km), InputType.TYPE_CLASS_NUMBER);
@@ -649,6 +664,284 @@ private void renderPage(int page) {
         if (!r.nextDate.isEmpty()) ReminderScheduler.schedule(this, r.id, r.title, r.nextDate);
         toast(editing ? "Kayıt güncellendi" : "Kayıt oluşturuldu");
         openRecordDetail(r.id);
+    }
+
+
+    private LinearLayout smartInputPanel(String module, FormRefs f) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(12), dp(11), dp(12), dp(11));
+        wrap.setBackground(cardDrawable(accentSoft, dp(16), accent));
+
+        TextView titleView = tv("Akıllı giriş", text, 12, true);
+        wrap.addView(titleView);
+        TextView subtitle = tv("Fiş/belge fotoğrafını okut veya kaydı konuş. Bulunan alanlar forma gelir; otomatik kaydedilmez.", muted, 10, false);
+        subtitle.setPadding(0, dp(2), 0, dp(8));
+        wrap.addView(subtitle);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        Button photo = secondaryButton("📷 Fotoğraftan doldur");
+        Button voice = secondaryButton("🎤 Sesle doldur");
+        actions.addView(photo, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        gapHorizontal(actions, 8);
+        actions.addView(voice, new LinearLayout.LayoutParams(0, dp(46), 1f));
+        wrap.addView(actions);
+
+        f.smartStatus = tv("Henüz akıllı giriş kullanılmadı.", muted, 9, false);
+        f.smartStatus.setPadding(0, dp(7), 0, 0);
+        wrap.addView(f.smartStatus);
+
+        photo.setOnClickListener(v -> {
+            pendingSmartForm = f;
+            pendingSmartModule = module;
+            showOcrSourceChooser();
+        });
+        voice.setOnClickListener(v -> {
+            pendingSmartForm = f;
+            pendingSmartModule = module;
+            startSmartVoice();
+        });
+        return wrap;
+    }
+
+    private void showOcrSourceChooser() {
+        new AlertDialog.Builder(this)
+                .setTitle("Fotoğraftan doldur")
+                .setItems(new String[]{"Kamera ile çek", "Galeriden / dosyadan seç"}, (dialog, which) -> {
+                    if (which == 0) captureOcrImage();
+                    else pickOcrImage();
+                })
+                .setNegativeButton("Vazgeç", null)
+                .show();
+    }
+
+    private void pickOcrImage() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(Intent.createChooser(i, "Fiş / belge fotoğrafı seç"), PICK_OCR_IMAGE);
+    }
+
+    private void captureOcrImage() {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "tasitim_scan_" + System.currentTimeMillis() + ".jpg");
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) { toast("Kamera için geçici dosya oluşturulamadı"); return; }
+            Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            if (camera.resolveActivity(getPackageManager()) == null) {
+                getContentResolver().delete(uri, null, null);
+                toast("Kamera uygulaması bulunamadı");
+                return;
+            }
+            pendingOcrCameraUri = uri;
+            camera.putExtra(MediaStore.EXTRA_OUTPUT, uri);
+            camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(camera, CAPTURE_OCR_IMAGE);
+        } catch (Exception e) {
+            cleanupOcrCameraImage();
+            toast("Kamera açılamadı");
+        }
+    }
+
+    private void startSmartVoice() {
+        Intent i = VoiceInput.createIntent();
+        if (i.resolveActivity(getPackageManager()) == null) {
+            toast("Bu cihazda konuşma tanıma hizmeti bulunamadı");
+            return;
+        }
+        if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+            pendingSmartForm.smartStatus.setText("Dinlemeye hazır… Kaydı doğal şekilde anlat.");
+            pendingSmartForm.smartStatus.setTextColor(accent);
+        }
+        startActivityForResult(i, VoiceInput.REQUEST_CODE);
+    }
+
+    private void processOcrImage(Uri uri, boolean temporaryCameraImage) {
+        if (uri == null || pendingSmartForm == null || pendingSmartModule == null) {
+            if (temporaryCameraImage) cleanupOcrCameraImage();
+            return;
+        }
+        if (pendingSmartForm.smartStatus != null) {
+            pendingSmartForm.smartStatus.setText("Fotoğraf cihaz üzerinde okunuyor…");
+            pendingSmartForm.smartStatus.setTextColor(accent);
+        }
+        ReceiptOcr.process(this, uri, new ReceiptOcr.Callback() {
+            @Override
+            public void onResult(RecordParser.Parsed result) {
+                runOnUiThread(() -> {
+                    if (temporaryCameraImage) cleanupOcrCameraImage();
+                    handleSmartResult(result, "Fotoğraf");
+                });
+            }
+
+            @Override
+            public void onError(Exception error) {
+                runOnUiThread(() -> {
+                    if (temporaryCameraImage) cleanupOcrCameraImage();
+                    if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+                        pendingSmartForm.smartStatus.setText("Fotoğraf okunamadı — alanları manuel girebilirsin.");
+                        pendingSmartForm.smartStatus.setTextColor(warning);
+                    }
+                    toast("Belge okunamadı");
+                });
+            }
+        });
+    }
+
+    private void cleanupOcrCameraImage() {
+        Uri uri = pendingOcrCameraUri;
+        pendingOcrCameraUri = null;
+        if (uri != null) {
+            try { getContentResolver().delete(uri, null, null); }
+            catch (Exception ignored) { }
+        }
+    }
+
+    private void handleSmartResult(RecordParser.Parsed parsed, String source) {
+        if (parsed == null || pendingSmartForm == null || pendingSmartModule == null) return;
+        String detected = parsed.type == null ? "" : parsed.type;
+        if (!detected.isEmpty() && !detected.equals(pendingSmartModule)) {
+            String current = pendingSmartModule;
+            new AlertDialog.Builder(this)
+                    .setTitle("Kayıt türü farklı görünüyor")
+                    .setMessage("Bu içerik “" + detected + "” kaydı gibi görünüyor. Şu anda “" + current + "” formundasın.")
+                    .setNegativeButton("Bu formda kullan", (d, w) -> applyParsedToCurrentForm(parsed, source))
+                    .setPositiveButton(detected + " formuna geç", (d, w) -> {
+                        openRecordForm(detected, null);
+                        applyParsedToCurrentForm(parsed, source);
+                    })
+                    .show();
+            return;
+        }
+        applyParsedToCurrentForm(parsed, source);
+    }
+
+    private void applyParsedToCurrentForm(RecordParser.Parsed p, String source) {
+        FormRefs f = pendingSmartForm;
+        String module = pendingSmartModule;
+        if (f == null || module == null) return;
+        int found = 0;
+
+        if (p.date != null && !p.date.isEmpty() && f.date != null) {
+            f.date.value.setText(p.date);
+            f.date.value.setTextColor(success);
+            found++;
+        }
+        if (p.km > 0 && f.km != null) {
+            f.km.setText(String.valueOf(p.km));
+            markSmartField(f.km);
+            found++;
+        }
+        if (p.amount > 0 && f.cost != null) {
+            f.cost.setText(trimDouble(p.amount));
+            markSmartField(f.cost);
+            found++;
+        }
+        if (p.quantity > 0 && f.quantity != null) {
+            f.quantity.setText(trimDouble(p.quantity));
+            markSmartField(f.quantity);
+            found++;
+        }
+
+        if ("Yakıt".equals(module)) {
+            if (p.fuelType != null && !p.fuelType.isEmpty() && f.subtype != null) {
+                selectSpinnerValue(f.subtype, p.fuelType);
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (p.vendor != null && !p.vendor.isEmpty()) {
+                if (f.title != null) {
+                    f.title.setText(p.vendor + " yakıt alımı");
+                    markSmartField(f.title);
+                }
+                if (f.detail != null) {
+                    f.detail.setText(p.vendor);
+                    markSmartField(f.detail);
+                }
+                found++;
+            }
+        } else if ("Bakım".equals(module)) {
+            if (p.maintenanceSubtype != null && !p.maintenanceSubtype.isEmpty() && f.subtype != null) {
+                selectSpinnerValue(f.subtype, p.maintenanceSubtype);
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (!p.maintenanceParts.isEmpty()) {
+                for (CheckBox cb : f.parts) {
+                    if (p.maintenanceParts.contains(String.valueOf(cb.getText()))) cb.setChecked(true);
+                }
+                found++;
+            }
+            if (p.vendor != null && !p.vendor.isEmpty()) {
+                if (f.title != null) { f.title.setText(p.vendor + " bakım"); markSmartField(f.title); }
+                if (f.detail != null && f.detail.getText().toString().trim().isEmpty()) {
+                    f.detail.setText("Servis: " + p.vendor);
+                    markSmartField(f.detail);
+                }
+                found++;
+            }
+        } else if ("Sigorta/Kasko".equals(module)) {
+            if (p.insuranceSubtype != null && !p.insuranceSubtype.isEmpty() && f.subtype != null) {
+                selectSpinnerValue(f.subtype, p.insuranceSubtype);
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (p.vendor != null && !p.vendor.isEmpty() && f.detail != null) {
+                f.detail.setText(p.vendor);
+                markSmartField(f.detail);
+                found++;
+            }
+        } else if ("Vergi".equals(module)) {
+            if (p.type != null && "Vergi".equals(p.type) && f.subtype != null) {
+                selectSpinnerValue(f.subtype, "MTV");
+                markSmartSpinner(f.subtype);
+            }
+        } else if ("Hasar".equals(module) && p.type != null && "Hasar".equals(p.type) && f.subtype != null) {
+            selectSpinnerValue(f.subtype, "Kaza");
+            markSmartSpinner(f.subtype);
+        }
+
+        if (p.vendor != null && !p.vendor.isEmpty() && f.title != null &&
+                !"Yakıt".equals(module) && !"Bakım".equals(module) &&
+                f.title.getText().toString().trim().equals(defaultTitle(module))) {
+            f.title.setText(p.vendor + " - " + moduleTitle(module));
+            markSmartField(f.title);
+        }
+
+        if (f.smartStatus != null) {
+            f.smartStatus.setText(smartResultSummary(module, p, source));
+            f.smartStatus.setTextColor(found > 0 ? success : warning);
+        }
+        if (found > 0) toast(source + " verileri forma aktarıldı — kaydetmeden önce kontrol et");
+        else toast("Uygun alan okunamadı — manuel girebilirsin");
+    }
+
+    private String smartResultSummary(String module, RecordParser.Parsed p, String source) {
+        ArrayList<String> items = new ArrayList<>();
+        items.add("Tarih " + ((p.date != null && !p.date.isEmpty()) ? "✓" : "okunamadı"));
+        items.add("KM " + (p.km > 0 ? "✓" : "okunamadı"));
+        if (!"Muayene".equals(module)) items.add("Tutar " + (p.amount > 0 ? "✓" : "okunamadı"));
+        if ("Yakıt".equals(module)) {
+            items.add("Miktar " + (p.quantity > 0 ? "✓" : "okunamadı"));
+            items.add("İstasyon " + ((p.vendor != null && !p.vendor.isEmpty()) ? "✓" : "okunamadı"));
+        } else if ("Bakım".equals(module) || "Sigorta/Kasko".equals(module)) {
+            items.add("Firma " + ((p.vendor != null && !p.vendor.isEmpty()) ? "✓" : "okunamadı"));
+        }
+        return source + " sonucu • " + join(items, " • ") + "\nOkunamayan alanları manuel gir; otomatik kayıt yapılmadı.";
+    }
+
+    private void markSmartField(EditText field) {
+        if (field == null) return;
+        field.setBackground(cardDrawable(accentSoft, dp(14), accent));
+    }
+
+    private void markSmartSpinner(Spinner spinner) {
+        if (spinner == null) return;
+        spinner.setBackground(cardDrawable(accentSoft, dp(14), accent));
     }
 
     private void confirmDeleteRecord(AppDatabase.Record r) {
@@ -1636,7 +1929,39 @@ private void openVehicleForm() {
     @Override
 protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(resultCode!=RESULT_OK || data==null) return;
+        if (resultCode != RESULT_OK) {
+            if (requestCode == CAPTURE_OCR_IMAGE) cleanupOcrCameraImage();
+            return;
+        }
+
+        if (requestCode == CAPTURE_OCR_IMAGE) {
+            Uri cameraUri = pendingOcrCameraUri;
+            if (cameraUri != null) processOcrImage(cameraUri, true);
+            else toast("Kamera fotoğrafı alınamadı");
+            return;
+        }
+
+        if (requestCode == VoiceInput.REQUEST_CODE) {
+            String spoken = VoiceInput.extract(data);
+            if (spoken.isEmpty()) {
+                if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+                    pendingSmartForm.smartStatus.setText("Ses anlaşılamadı — alanları manuel girebilirsin.");
+                    pendingSmartForm.smartStatus.setTextColor(warning);
+                }
+                toast("Ses anlaşılamadı");
+            } else {
+                handleSmartResult(RecordParser.fromText(spoken), "Ses");
+            }
+            return;
+        }
+
+        if (requestCode == PICK_OCR_IMAGE) {
+            if (data != null && data.getData() != null) processOcrImage(data.getData(), false);
+            else toast("Fotoğraf seçilemedi");
+            return;
+        }
+
+        if (data == null) return;
 
         if (requestCode == PICK_CV_IMAGES) {
             int added = 0;
