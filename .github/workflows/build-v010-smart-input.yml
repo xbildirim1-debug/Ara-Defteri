@@ -24,6 +24,7 @@ jobs:
           base64 -d .github/patches/v010-smart-input.patch.gz.b64 | gunzip > /tmp/v010.patch
           git apply --check /tmp/v010.patch
           git apply /tmp/v010.patch
+          base64 -d .github/patches/v010-smart-input-newfiles.tar.gz.b64 | tar -xzf -
           if [ -f gradle.properties ]; then
             grep -q '^android.useAndroidX=' gradle.properties || echo 'android.useAndroidX=true' >> gradle.properties
           else
