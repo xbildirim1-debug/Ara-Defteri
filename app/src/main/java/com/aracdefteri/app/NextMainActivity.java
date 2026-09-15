@@ -92,6 +92,7 @@ public class NextMainActivity extends Activity {
             String capture=savedInstanceState.getString("capture");captureUri=capture==null?null:Uri.parse(capture);
             pendingVehicleId=savedInstanceState.getInt("pendingVehicle");pendingAttachmentRecordId=savedInstanceState.getLong("attachment",-1);
             pendingAttachmentLabel=savedInstanceState.getString("attachmentLabel","Belge");
+            java.util.ArrayList<String> selectedPhotos=savedInstanceState.getStringArrayList("cvPhotos");if(selectedPhotos!=null)for(String photo:selectedPhotos)cvPhotoUris.add(Uri.parse(photo));
         }
         resolveTheme();
         ReminderScheduler.ensureChannel(this);
@@ -108,6 +109,7 @@ public class NextMainActivity extends Activity {
         else if ("light".equals(mode)) dark = false;
         else dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
 
+        setTheme(dark?R.style.AppTheme_Dark:R.style.AppTheme);
         if (dark) {
             bg = Color.rgb(10, 16, 29);
             surface = Color.rgb(20, 30, 47);
@@ -1399,7 +1401,8 @@ private void openVehicleForm() {
         TextView t = new TextView(this);
         t.setText(value);
         t.setTextColor(color);
-        t.setTextSize(sp);
+        t.setTextSize(Math.max(sp,11));
+        t.setLineSpacing(dp(2),1.02f);
         if(bold) t.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
         t.setLineSpacing(0,1.08f);
         return t;
@@ -1610,7 +1613,7 @@ private void openVehicleForm() {
             toast("En fazla 10 araç resmi ekleyebilirsin");
             return;
         }
-        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
         i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
@@ -1677,6 +1680,7 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         if (uri == null || cvPhotoUris.size() >= VehicleCvPdf.MAX_EXTRA_PHOTOS) return false;
         String value = uri.toString();
         for (Uri existing : cvPhotoUris) if (existing != null && value.equals(existing.toString())) return false;
+        try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(SecurityException ignored){}
         cvPhotoUris.add(uri);
         return true;
     }
@@ -1705,13 +1709,17 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
     }
 
 private void createVehiclePdf() {
-        try {
-            VehicleCvPdf.Result result = VehicleCvPdf.create(this, db, prefs, cvPhotoUris);
-            toast("Araç CV oluşturuldu • Belge No: " + result.documentNo);
-            if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q) openPdf(result.uri);
-        } catch(Exception e) {
-            toast("PDF oluşturulamadı: " + e.getMessage());
-        }
+        final VehicleCvPdf.Result[] result={null};
+        final List<Uri> photos=new ArrayList<>(cvPhotoUris);
+        runWork("Araç CV hazırlanıyor…",()->result[0]=VehicleCvPdf.create(this,db,prefs,photos),()->{
+            toast("Araç CV oluşturuldu");
+            new AlertDialog.Builder(this).setTitle("Araç CV hazır").setItems(new String[]{"PDF'yi aç","PDF'yi paylaş"},(d,w)->{
+                if(w==0)openPdf(result[0].uri);else{
+                    Intent send=new Intent(Intent.ACTION_SEND).setType("application/pdf").putExtra(Intent.EXTRA_STREAM,result[0].uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivity(Intent.createChooser(send,"Araç CV paylaş"));
+                }
+            }).show();
+        });
     }
 
     private void openPdf(Uri uri) {
@@ -1720,7 +1728,7 @@ private void createVehiclePdf() {
             i.setDataAndType(uri,"application/pdf");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(i);
-        } catch(Exception ignored) {}
+        } catch(Exception ignored) {toast("PDF görüntüleyici bulunamadı. PDF dosyası kaydedildi.");}
     }
 
     private String today() { return new SimpleDateFormat("dd.MM.yyyy",Locale.getDefault()).format(new Date()); }
@@ -1755,6 +1763,7 @@ private void createVehiclePdf() {
     private void toast(String s) { Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
     @Override protected void onSaveInstanceState(Bundle out){
         super.onSaveInstanceState(out);if(captureUri!=null)out.putString("capture",captureUri.toString());
+        java.util.ArrayList<String> selectedPhotos=new java.util.ArrayList<>();for(Uri uri:cvPhotoUris)selectedPhotos.add(uri.toString());out.putStringArrayList("cvPhotos",selectedPhotos);
         out.putInt("pendingVehicle",pendingVehicleId);out.putLong("attachment",pendingAttachmentRecordId);out.putString("attachmentLabel",pendingAttachmentLabel);
     }
     private void openNotification(Intent intent){
