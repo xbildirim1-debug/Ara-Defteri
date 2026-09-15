@@ -348,15 +348,14 @@ private void renderPage(int page) {
     private void addModuleTile(GridLayout grid, String module) {
         LinearLayout tile = card();
         tile.setPadding(dp(15), dp(15), dp(15), dp(15));
-        TextView icon = tv(moduleMark(module), Color.WHITE, 15, true);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(cardDrawable(moduleColor(module), dp(17), Color.TRANSPARENT));
-        tile.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        FrameLayout iconBox=new FrameLayout(this);iconBox.setPadding(dp(7),dp(7),dp(7),dp(7));iconBox.setBackground(cardDrawable(surface2,dp(16),Color.TRANSPARENT));
+        iconBox.addView(new ModuleIcon(this,module,moduleColor(module)),new FrameLayout.LayoutParams(-1,-1));
+        tile.addView(iconBox,new LinearLayout.LayoutParams(dp(46),dp(46)));
         gap(tile, 12);
         tile.addView(tv(moduleTitle(module), text, 15, true));
         tile.addView(tv(moduleSubtitle(module), muted, 10, false));
         gap(tile, 10);
-        String count = "Giderler".equals(module) ? formatMoney(db.getExpenseTotal()) : db.countRecordsByType(module) + " kayıt";
+        String count = "Galeri".equals(module)?db.getPhotos().size()+" fotoğraf":"Giderler".equals(module) ? formatMoney(db.getExpenseTotal()) : db.countRecordsByType(module) + " kayıt";
         tile.addView(tv(count + "   ›", moduleColor(module), 11, true));
         tile.setOnClickListener(v -> openModule(module));
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
@@ -498,7 +497,7 @@ private void renderPage(int page) {
         form.setPadding(dp(16), dp(16), dp(16), dp(16));
         form.addView(formSection("Temel bilgiler", "Zorunlu alanları kısa tuttuk"));
         f.title = formField(form, titleHint(module), initialTitle, InputType.TYPE_CLASS_TEXT);
-        f.date = formDate(form, "Tarih", existing == null ? today() : base.date, false);
+        f.date = formDate(form, "Sigorta/Kasko".equals(module)?"Poliçe başlangıç tarihi":"Tarih", existing == null ? today() : base.date, false);
         f.km = formField(form, "Kilometre", existing == null ? String.valueOf(vehicle.km) : String.valueOf(base.km), InputType.TYPE_CLASS_NUMBER);
 
         if ("Bakım".equals(module)) {
@@ -506,6 +505,8 @@ private void renderPage(int page) {
             form.addView(formSection("Değişen parçalar", "Birden fazlasını seçebilirsin"));
             String[] parts = {"Motor yağı", "Yağ filtresi", "Hava filtresi", "Polen filtresi", "Yakıt filtresi", "Fren balatası", "Fren diski", "Buji", "Akü", "Triger", "Lastik", "Antifriz", "Şanzıman yağı", "Diğer"};
             Set<String> selected = new HashSet<>(Arrays.asList(base.extra.split("\\|")));
+            LinearLayout partsBox=new LinearLayout(this);partsBox.setOrientation(LinearLayout.VERTICAL);partsBox.setVisibility(View.GONE);
+            Button expandParts=secondaryButton("Değişen parçaları seç");expandParts.setOnClickListener(v->partsBox.setVisibility(partsBox.getVisibility()==View.GONE?View.VISIBLE:View.GONE));form.addView(expandParts);form.addView(partsBox);
             for (String p : parts) {
                 CheckBox cb = new CheckBox(this);
                 cb.setText(p);
@@ -513,7 +514,7 @@ private void renderPage(int page) {
                 cb.setTextSize(12);
                 cb.setChecked(selected.contains(p));
                 f.parts.add(cb);
-                form.addView(cb);
+                partsBox.addView(cb);
             }
             f.cost = formField(form, "Tutar (isteğe bağlı)", moneyRaw(base.cost), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
             f.detail = formMultiline(form, "Açıklama / yapılan işlemler", base.detail);
@@ -530,11 +531,12 @@ private void renderPage(int page) {
             f.detail = formMultiline(form, "Rapor özeti / bulgular", base.detail);
         } else if ("Muayene".equals(module)) {
             f.subtype = formSpinner(form, "Muayene sonucu", new String[]{"Kusursuz", "Hafif kusurlu", "Ağır kusurlu", "Emniyetsiz"}, base.subtype);
+            f.cost=formField(form,"Tutar (isteğe bağlı)",moneyRaw(base.cost),InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
             f.detail = formMultiline(form, "Kusurlar / notlar", base.detail);
             f.nextDate = formDate(form, "Sonraki muayene tarihi", base.nextDate, true);
         } else if ("Vergi".equals(module)) {
             f.subtype = formSpinner(form, "Vergi türü", new String[]{"MTV", "Ek MTV", "Diğer resmî ödeme"}, base.subtype);
-            f.status = formSpinner(form, "Durum", new String[]{"Ödendi", "Ödenmedi"}, base.status);
+            f.status = formSpinner(form, "Durum", new String[]{"Ödenmedi", "Ödendi"}, base.status);
             f.cost = formField(form, "Tutar", moneyRaw(base.cost), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
             f.detail = formMultiline(form, "Dönem / açıklama", base.detail);
             f.nextDate = formDate(form, "Son ödeme / sonraki ödeme tarihi", base.nextDate, true);
@@ -1519,6 +1521,8 @@ private void openVehicleForm() {
     }
 
     private String moduleSubtitle(String m) {
+        if("Lastik".equals(m)) return "Mevsim, ebat ve değişim geçmişi";
+        if("Galeri".equals(m)) return "Aracının fotoğraf hikâyesi";
         if("Bakım".equals(m)) return "Bakım, değişen parçalar ve sonraki işlem";
         if("Hasar".equals(m)) return "Hasar, onarım ve belgeler";
         if("Ekspertiz".equals(m)) return "Ekspertiz rapor geçmişi";
@@ -1834,6 +1838,9 @@ private void createVehiclePdf() {
     private void metadataChoice(LinearLayout form,FormRefs f,org.json.JSONObject data,String key,String label,String[] values){f.choices.put(key,formSpinner(form,label,values,data.optString(key,"")));}
     private void addTurkeyFields(LinearLayout form,String module,AppDatabase.Record r,FormRefs f){
         org.json.JSONObject data=meta(r);int textType=InputType.TYPE_CLASS_TEXT;
+        LinearLayout details=new LinearLayout(this);details.setOrientation(LinearLayout.VERTICAL);details.setVisibility(View.GONE);
+        Button expand=secondaryButton("Ek bilgileri göster");expand.setOnClickListener(v->{boolean show=details.getVisibility()==View.GONE;details.setVisibility(show?View.VISIBLE:View.GONE);expand.setText(show?"Ek bilgileri gizle":"Ek bilgileri göster");});form.addView(expand);form.addView(details);
+        form=details;
         form.addView(formSection("Ek bilgiler","İsteğe bağlı; belge ve fotoğrafları kaydı oluşturduktan sonra ekleyebilirsin"));
         if("Bakım".equals(module))metadataField(form,f,data,"service","Servis / usta adı",textType);
         if("Muayene".equals(module))metadataChoice(form,f,data,"inspection_kind","İşlem türü",new String[]{"Araç muayenesi","Egzoz emisyon ölçümü"});
@@ -1889,6 +1896,7 @@ private void createVehiclePdf() {
         java.time.LocalDate now=java.time.LocalDate.now();double month=0,year=0;
         java.util.Map<String,Double> groups=new java.util.LinkedHashMap<>();
         for(AppDatabase.Record r:db.getRecords(Integer.MAX_VALUE)){
+            if("Vergi".equals(r.type)&&"Ödenmedi".equals(r.status))continue;
             java.time.LocalDate d=RecordRules.date(r.date);if(d!=null&&d.getYear()==now.getYear()){year+=r.cost;if(d.getMonth()==now.getMonth())month+=r.cost;groups.put(moduleTitle(r.type),groups.getOrDefault(moduleTitle(r.type),0d)+r.cost);}
         }
         for(AppDatabase.Expense e:db.getExpenses()){

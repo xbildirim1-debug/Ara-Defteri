@@ -56,7 +56,7 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest --stacktrace
-            adb pull /sdcard/Android/data/com.aracdefteri.app/files/qa qa
+            adb pull /sdcard/Download/AracDefteriQA qa
 
       - name: Upload validation artifacts
         if: always()

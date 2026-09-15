@@ -303,7 +303,7 @@ public class AppDatabase extends SQLiteOpenHelper {
         String suffix = new SimpleDateFormat("MM.yyyy", Locale.getDefault()).format(new Date());
         Cursor c = getReadableDatabase().rawQuery("SELECT amount,date FROM expenses WHERE vehicle_id="+activeId(), null);
         while(c.moveToNext()) if(nz(c.getString(1)).endsWith(suffix)) total += c.getDouble(0); c.close();
-        Cursor r = getReadableDatabase().rawQuery("SELECT cost,date FROM records WHERE cost>0 AND vehicle_id="+activeId(), null);
+        Cursor r = getReadableDatabase().rawQuery("SELECT cost,date FROM records WHERE cost>0 AND NOT (type='Vergi' AND status='Ödenmedi') AND vehicle_id="+activeId(), null);
         while(r.moveToNext()) if(nz(r.getString(1)).endsWith(suffix)) total += r.getDouble(0); r.close();
         return total;
     }
@@ -311,7 +311,7 @@ public class AppDatabase extends SQLiteOpenHelper {
     public double getExpenseTotal() {
         double total=0;
         Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(amount),0) FROM expenses WHERE vehicle_id="+activeId(),null); c.moveToFirst(); total+=c.getDouble(0); c.close();
-        Cursor r=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(cost),0) FROM records WHERE vehicle_id="+activeId(),null); r.moveToFirst(); total+=r.getDouble(0); r.close();
+        Cursor r=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(cost),0) FROM records WHERE NOT (type='Vergi' AND status='Ödenmedi') AND vehicle_id="+activeId(),null); r.moveToFirst(); total+=r.getDouble(0); r.close();
         return total;
     }
 

@@ -77,7 +77,20 @@ public class StorageAndUiTest {
             }catch(Exception e){error[0]=e;}});if(error[0]!=null)throw error[0];
         }
     }
+    @Test public void bundledOcrReadsMileageAndRejectsBlankImage()throws Exception{
+        Bitmap image=Bitmap.createBitmap(1200,400,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(image);canvas.drawColor(Color.WHITE);Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setColor(Color.BLACK);paint.setTextSize(100);paint.setTypeface(Typeface.MONOSPACE);canvas.drawText("ODO 68420 km",60,220,paint);
+        com.google.mlkit.vision.text.TextRecognizer recognizer=com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS);
+        try{
+            com.google.mlkit.vision.text.Text result=com.google.android.gms.tasks.Tasks.await(recognizer.process(com.google.mlkit.vision.common.InputImage.fromBitmap(image,0)),30,java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(OdometerParser.candidates(result.getText()).contains(68420));
+            canvas.drawColor(Color.WHITE);result=com.google.android.gms.tasks.Tasks.await(recognizer.process(com.google.mlkit.vision.common.InputImage.fromBitmap(image,0)),30,java.util.concurrent.TimeUnit.SECONDS);assertTrue(OdometerParser.candidates(result.getText()).isEmpty());
+        }finally{recognizer.close();image.recycle();}
+    }
     private void invoke(Object o,String name,Class[] types,Object...args){try{java.lang.reflect.Method m=o.getClass().getDeclaredMethod(name,types);m.setAccessible(true);m.invoke(o,args);}catch(Exception e){throw new RuntimeException(e);}}
     private void shot(String name)throws Exception{Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();assertNotNull(image);write(image,name);image.recycle();}
-    private void write(Bitmap image,String name)throws Exception{File dir=new File(c.getExternalFilesDir(null),"qa");dir.mkdirs();try(OutputStream out=new FileOutputStream(new File(dir,name))){image.compress(Bitmap.CompressFormat.PNG,100,out);}}
+    private void write(Bitmap image,String name)throws Exception{
+        ContentValues values=new ContentValues();values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME,name);values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE,"image/png");values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH,"Download/AracDefteriQA");
+        Uri uri=c.getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+        try(OutputStream out=c.getContentResolver().openOutputStream(uri)){image.compress(Bitmap.CompressFormat.PNG,100,out);}
+    }
 }
