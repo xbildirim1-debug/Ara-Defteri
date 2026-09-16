@@ -139,13 +139,18 @@ public final class SmartDocumentAnalyzer {
         String vendor = knownVendor(n);
         if (!vendor.isEmpty()) p.vendor = vendor;
         p.policyNo = extractLabelValue(raw, new String[]{"police/yenileme no", "police no", "police numarasi"}, "[A-Z0-9][A-Z0-9./_-]{3,40}");
-        p.policyStartDate = labelledDate(raw, new String[]{"police baslama tarihi", "baslama tarihi", "sigorta baslangici", "sigorta baslangic"});
+        p.policyStartDate = labelledDate(raw, new String[]{"police baslama tarihi", "baslama tarihi", "sigorta baslangici", "sigorta baslangic", "başlangıç tarihi", "baslangic tarihi"});
         p.policyEndDate = labelledDate(raw, new String[]{"police bitis tarihi", "bitis tarihi", "sigorta sonu", "sigorta bitis"});
         if (!p.policyStartDate.isEmpty()) p.date = p.policyStartDate;
         if (!p.policyEndDate.isEmpty()) p.nextDate = p.policyEndDate;
+        if (!p.policyStartDate.isEmpty() && !p.policyEndDate.isEmpty()) {
+            try {java.text.SimpleDateFormat df=new java.text.SimpleDateFormat("dd.MM.yyyy",Locale.US);
+                if(!df.parse(p.policyEndDate).after(df.parse(p.policyStartDate))){p.policyEndDate="";p.nextDate="";p.warnings.add("Bitiş tarihi başlangıçtan sonra olmalı; tekrar kontrol et.");}
+            } catch(Exception ignored){}
+        }
         double premium = labelledMoney(raw, new String[]{"odenecek tutar", "odenecek yekun", "brut prim", "toplam prim", "net prim", "prim"});
         if (premium > 0) p.amount = premium;
-        p.detailSummary = joinNonEmpty(" • ", p.vendor, p.policyNo.isEmpty() ? "" : "Poliçe: " + p.policyNo, p.policyStartDate.isEmpty() ? "" : "Başlangıç: " + p.policyStartDate, p.policyEndDate.isEmpty() ? "" : "Bitiş: " + p.policyEndDate, p.plate.isEmpty() ? "" : "Plaka: " + p.plate);
+        p.detailSummary = joinNonEmpty(" • ", p.vendor, p.insuranceSubtype, p.policyNo.isEmpty() ? "" : "Poliçe: " + p.policyNo, p.policyStartDate.isEmpty() ? "" : "Başlangıç: " + p.policyStartDate, p.policyEndDate.isEmpty() ? "" : "Bitiş: " + p.policyEndDate, p.plate.isEmpty() ? "" : "Plaka: " + p.plate);
     }
 
     private static void enrichInspection(String raw, String n, RecordParser.Parsed p) {
@@ -181,6 +186,7 @@ public final class SmartDocumentAnalyzer {
         String reportDate = labelledDate(raw, new String[]{"rapor tarihi", "islem tarihi", "ekspertiz tarihi", "giris tarihi"});
         if (!reportDate.isEmpty()) p.date = reportDate;
         List<String> lines = collectRelevantLines(raw, new String[]{"orijinal", "orj", "boyali", "boya", "degisen", "degisim", "lokal", "duzelt", "gocuk", "hasarli", "ezik", "sasi", "podye", "direk", "dyno", "motor guc", "motor performans", "obd", "ariza", "fren", "suspansiyon", "airbag", "hava yastigi", "yag kac", "su kac", "lastik", "amortisor", "aks"}, 10);
+        lines.removeIf(line -> !normalize(line).matches(".*(?:kaput|kapi|camurluk|tavan|bagaj|tampon|sasi|podye|direk|motor|fren|obd|airbag|suspansiyon).*"));
         p.detailSummary = lines.isEmpty() ? "" : join(lines, " | ");
         double reportFee = labelledMoney(raw, new String[]{"ekspertiz ucreti", "paket ucreti", "odenen", "toplam"});
         if (reportFee > 0 && reportFee < 200000) p.amount = reportFee;
@@ -302,7 +308,21 @@ public final class SmartDocumentAnalyzer {
 
     private static String labelledDate(String raw, String[] labels) {
         String[] lines = raw.split("\\r?\\n");
-        for (int i = 0; i < lines.length; i++) { String n = normalize(lines[i]); for (String label : labels) { if (!n.contains(normalize(label))) continue; for (int j = i; j <= Math.min(i + 2, lines.length - 1); j++) { String d = firstDate(lines[j]); if (!d.isEmpty()) return d; } } }
+        for (String label : labels) for(int i=0;i<lines.length;i++) {
+            String n=normalize(lines[i]); int at=n.indexOf(normalize(label));
+            if(at<0)continue;
+            // Restrict to the value AFTER this label, before another date label.
+            String tail=lines[i].substring(Math.min(lines[i].length(),at+label.length()));
+            java.util.regex.Matcher nextLabel=Pattern.compile("(?i)(?:başlama|başlangıç|bitiş|tanzim|vade|başlangic|bitis|baslama)\\s*(?:tarihi)?").matcher(tail);
+            if(nextLabel.find())tail=tail.substring(0,nextLabel.start());
+            String d=firstDate(tail);if(!d.isEmpty())return d;
+            if(!tail.trim().replace(":", "").isEmpty())continue;
+            if(i+1<lines.length && !normalize(lines[i+1]).contains("tarih")) {
+                // One isolated value below a label; multiple columns need layout association.
+                String next=lines[i+1].trim();
+                if(next.matches("[0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4}(?:\\s.*)?")){d=firstDate(next);if(!d.isEmpty())return d;}
+            }
+        }
         return "";
     }
 
@@ -365,7 +385,7 @@ public final class SmartDocumentAnalyzer {
     }
 
     private static String knownVendor(String n) {
-        String[][] known={{"shell","Shell"},{"opet","Opet"},{"petrol ofisi","Petrol Ofisi"},{"totalenergies","TotalEnergies"},{"total energies","TotalEnergies"},{"bp","BP"},{"aytemiz","Aytemiz"},{"alpet","Alpet"},{"turkiye petrolleri","Türkiye Petrolleri"},{"tp petrol","Türkiye Petrolleri"},{"kadoil","Kadoil"},{"sunpet","Sunpet"},{"socar","SOCAR"},{"lukoil","Lukoil"},{"moil","MOil"},{"termo","Termopet"},{"allianz","Allianz"},{"anadolu sigorta","Anadolu Sigorta"},{"turkiye sigorta","Türkiye Sigorta"},{"axa","AXA"},{"mapfre","MAPFRE"},{"hdi","HDI Sigorta"},{"sompo","Sompo"},{"quick sigorta","Quick Sigorta"},{"ray sigorta","Ray Sigorta"},{"zurich","Zurich"},{"neova","Neova"},{"unico","Unico Sigorta"},{"tuvturk","TÜVTÜRK"}};
+        String[][] known={{"doga sigorta","Doğa Sigorta"},{"doga\\s*sigorta","Doğa Sigorta"},{"aksigorta","Aksigorta"},{"hepi sigorta","Hepiyi Sigorta"},{"hepiyi","Hepiyi Sigorta"},{"turk nippon","Türk Nippon Sigorta"},{"shell","Shell"},{"opet","Opet"},{"petrol ofisi","Petrol Ofisi"},{"totalenergies","TotalEnergies"},{"total energies","TotalEnergies"},{"bp","BP"},{"aytemiz","Aytemiz"},{"alpet","Alpet"},{"turkiye petrolleri","Türkiye Petrolleri"},{"tp petrol","Türkiye Petrolleri"},{"kadoil","Kadoil"},{"sunpet","Sunpet"},{"socar","SOCAR"},{"lukoil","Lukoil"},{"moil","MOil"},{"termo","Termopet"},{"allianz","Allianz"},{"anadolu sigorta","Anadolu Sigorta"},{"turkiye sigorta","Türkiye Sigorta"},{"axa","AXA"},{"mapfre","MAPFRE"},{"hdi","HDI Sigorta"},{"sompo","Sompo"},{"quick sigorta","Quick Sigorta"},{"ray sigorta","Ray Sigorta"},{"zurich","Zurich"},{"neova","Neova"},{"unico","Unico Sigorta"},{"tuvturk","TÜVTÜRK"}};
         for(String[] k:known) if(n.contains(k[0])) return k[1]; return "";
     }
 
@@ -391,3 +411,4 @@ public final class SmartDocumentAnalyzer {
     private static double round2(double v){return Math.round(v*100.0)/100.0;}
     private static String trim(double v){if(Math.abs(v-Math.rint(v))<0.000001)return String.valueOf((long)Math.rint(v));String s=String.format(Locale.US,"%.3f",v);while(s.endsWith("0"))s=s.substring(0,s.length()-1);if(s.endsWith("."))s=s.substring(0,s.length()-1);return s.replace('.',',');}
 }
+

@@ -32,6 +32,7 @@ public final class RecordParser {
         public double quantity = 0;
         public double unitPrice = 0;
         public int km = 0;
+        public int nextKm = 0;
 
         // Belge türünden bağımsız ortak alanlar.
         public String documentKind = "";
@@ -72,13 +73,19 @@ public final class RecordParser {
 
         // Farklı fiş/poliçe/muayene/ekspertiz şablonları için belgeye özel ikinci katman.
         SmartDocumentAnalyzer.enrich(raw, p);
+        if ("Yakıt".equals(detectType(lower))) { p.type="Yakıt"; p.documentKind="FUEL"; }
 
         // Matematiksel tutarlılık: toplam yok ama miktar ve birim fiyat güvenilir görünüyorsa öneri üret.
         if (p.amount <= 0 && p.quantity > 0 && p.unitPrice > 0) {
             double calculated = p.quantity * p.unitPrice;
             if (calculated > 1 && calculated < 1_000_000) p.amount = round2(calculated);
         }
+        OilCardParser.apply(raw, p);
         return p;
+    }
+
+    public static Parsed fromVoice(String text) {
+        return fromText(VoiceNumbers.normalize(text));
     }
 
     private static String normalize(String s) {
@@ -421,3 +428,4 @@ public final class RecordParser {
 
     private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 }
+

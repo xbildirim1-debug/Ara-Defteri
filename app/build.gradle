@@ -10,8 +10,8 @@ android {
         applicationId 'com.aracdefteri.app'
         minSdk 26
         targetSdk 35
-        versionCode 19
-        versionName '0.15-continuous-voice'
+        versionCode 21
+        versionName '0.17-assistant-obd-test'
     }
 
     buildTypes {
@@ -34,3 +34,4 @@ dependencies {
 }
 
 // v0.15 continuous voice input build trigger
+

@@ -45,6 +45,11 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     private Button finishButton;
 
     private boolean sessionFinished = false;
+    private boolean finishing = false;
+    private boolean paused = false;
+    private int errorCount = 0;
+    private final Runnable restartTask = this::startListeningNow;
+    private final Runnable finishTimeout = this::returnTranscript;
     private boolean listening = false;
     private String lastPartial = "";
 
@@ -52,6 +57,7 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         buildUi();
+        if(savedInstanceState!=null){ArrayList<String> saved=savedInstanceState.getStringArrayList("segments");if(saved!=null)committedSegments.addAll(saved);lastPartial=savedInstanceState.getString("partial", "");if(!lastPartial.isEmpty()){commitSegment(lastPartial);lastPartial="";}updateTranscript("");}
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             statusView.setText("Bu cihazda konuşma tanıma hizmeti bulunamadı.");
@@ -150,7 +156,7 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     }
 
     private void startListeningNow() {
-        if (sessionFinished || recognizer == null || listening) return;
+        if (sessionFinished || finishing || paused || recognizer == null || listening) return;
         try {
             lastPartial = "";
             listening = true;
@@ -164,8 +170,8 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
 
     private void scheduleRestart(long delay) {
         if (sessionFinished) return;
-        handler.removeCallbacksAndMessages(null);
-        handler.postDelayed(this::startListeningNow, delay);
+        handler.removeCallbacks(restartTask);
+        if (!finishing && !paused) handler.postDelayed(restartTask, delay);
     }
 
     private void commitSegment(String segment) {
@@ -216,26 +222,30 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     }
 
     private void finishAndReturn() {
+        if (sessionFinished || finishing) return;
+        finishing = true; finishButton.setEnabled(false);
+        statusView.setText("Son cümleni tamamlıyorum…");
+        handler.removeCallbacks(restartTask);
+        if (recognizer != null) {
+            try { recognizer.stopListening(); handler.postDelayed(finishTimeout, 3000); }
+            catch (Exception e) { returnTranscript(); }
+        } else returnTranscript();
+    }
+
+    private void returnTranscript() {
         if (sessionFinished) return;
-        sessionFinished = true;
-        handler.removeCallbacksAndMessages(null);
-        listening = false;
-        try { if (recognizer != null) recognizer.cancel(); } catch (Exception ignored) { }
-
-        String combined = combinedTranscript();
-        if (combined.isEmpty()) {
-            Toast.makeText(this, "Henüz anlaşılır bir konuşma alınmadı", Toast.LENGTH_SHORT).show();
-            sessionFinished = false;
-            scheduleRestart(300L);
-            return;
+        handler.removeCallbacks(finishTimeout);
+        String combined=combinedTranscript();
+        if(combined.isEmpty()) {
+            finishing=false; finishButton.setEnabled(true);
+            Toast.makeText(this,"Henüz anlaşılır konuşma alınmadı",Toast.LENGTH_SHORT).show();
+            listening=false;scheduleRestart(300);return;
         }
-
-        ArrayList<String> results = new ArrayList<>();
-        results.add(combined);
-        Intent out = new Intent();
-        out.putStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS, results);
-        setResult(RESULT_OK, out);
-        finish();
+        sessionFinished=true;handler.removeCallbacks(restartTask);
+        try {if(recognizer!=null)recognizer.cancel();}catch(Exception ignored){}
+        ArrayList<String> results=new ArrayList<>();results.add(combined);
+        Intent out=new Intent();out.putStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS,results);
+        setResult(RESULT_OK,out);finish();
     }
 
     private void cancelSession() {
@@ -275,24 +285,31 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     @Override
     public void onError(int error) {
         listening = false;
-        if (sessionFinished) return;
+        if (sessionFinished || paused) return;
+        if (!lastPartial.isEmpty()) { commitSegment(lastPartial); lastPartial=""; }
+        if (finishing) { returnTranscript(); return; }
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
             statusView.setText("Mikrofon izni gerekli.");
             return;
         }
         // NO_MATCH ve SPEECH_TIMEOUT normal duraksama gibi ele alınır.
         // RECOGNIZER_BUSY/CLIENT için biraz daha uzun bekleyip yeniden başlarız.
+        errorCount++;
         long delay = (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) ? 900L : RESTART_DELAY_MS;
         statusView.setText("Dinlemeye devam ediyorum…");
-        scheduleRestart(delay);
+        scheduleRestart(Math.min(5000L, delay * Math.max(1, Math.min(5,errorCount))));
     }
 
     @Override
     public void onResults(Bundle results) {
         listening = false;
         ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (sessionFinished || paused) return;
+        errorCount=0;
         if (matches != null && !matches.isEmpty()) commitSegment(matches.get(0));
+        else if (!lastPartial.isEmpty()) commitSegment(lastPartial);
         lastPartial = "";
+        if (finishing) { returnTranscript(); return; }
         if (!sessionFinished) {
             statusView.setText("Devam edebilirsin…");
             scheduleRestart(RESTART_DELAY_MS);
@@ -301,6 +318,7 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
 
     @Override
     public void onPartialResults(Bundle partialResults) {
+        if (sessionFinished || paused) return;
         ArrayList<String> matches = partialResults == null ? null : partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if (matches == null || matches.isEmpty()) return;
         lastPartial = clean(matches.get(0));
@@ -308,6 +326,19 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
     }
 
     @Override public void onEvent(int eventType, Bundle params) { }
+
+    @Override protected void onPause() {
+        super.onPause(); paused=true; handler.removeCallbacks(restartTask);
+        if (!lastPartial.isEmpty()) {commitSegment(lastPartial);lastPartial="";}
+        try {if(recognizer!=null)recognizer.cancel();}catch(Exception ignored){} listening=false;
+    }
+    @Override protected void onResume() {
+        super.onResume(); paused=false;
+        if(recognizer!=null&&!sessionFinished&&!finishing)scheduleRestart(350);
+    }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);out.putStringArrayList("segments",committedSegments);out.putString("partial",lastPartial);
+    }
 
     @Override
     protected void onDestroy() {
@@ -344,3 +375,4 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
         return value == null ? "" : value.trim().replaceAll("\\s+", " ");
     }
 }
+

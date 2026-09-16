@@ -70,6 +70,7 @@ public class NextMainActivity extends Activity {
     private SharedPreferences prefs;
     private LinearLayout pageHost, navBar;
     private int currentPage = 0;
+    private ObdView obdView;
     private String currentModule = null;
     private long selectedRecordId = -1;
     private long pendingAttachmentRecordId = -1;
@@ -162,8 +163,8 @@ public class NextMainActivity extends Activity {
 
 private void buildBottomNav() {
         navBar.removeAllViews();
-        String[] labels = {"Ana Sayfa", "Kayıtlar", "Asistan", "Araç CV", "Ayarlar"};
-        int[] icons = {R.drawable.ic_nav_home, R.drawable.ic_nav_records, R.drawable.ic_nav_assistant, R.drawable.ic_nav_cv, R.drawable.ic_nav_settings};
+        String[] labels = {"Ana Sayfa", "Kayıtlar", "Asistan", "Araç CV", "Ayarlar", "OBD"};
+        int[] icons = {R.drawable.ic_nav_home, R.drawable.ic_nav_records, R.drawable.ic_nav_assistant, R.drawable.ic_nav_cv, R.drawable.ic_nav_settings, R.drawable.ic_nav_obd};
         for (int i = 0; i < labels.length; i++) {
             final int page = i;
             boolean active = currentModule == null && currentPage == i && selectedRecordId < 0;
@@ -198,6 +199,7 @@ private void buildBottomNav() {
     }
 
 private void renderPage(int page) {
+        if(obdView!=null){obdView.close();obdView=null;}
         pendingSmartForm = null;
         pendingSmartModule = null;
         currentPage = page;
@@ -209,6 +211,7 @@ private void renderPage(int page) {
         else if (page == 1) renderRecordsHub(content);
         else if (page == 2) renderAssistant(content);
         else if (page == 3) renderCv(content);
+        else if (page == 5) { obdView=new ObdView(this, text, surface, accent); content.addView(obdView); }
         else renderSettings(content);
     }
 
@@ -409,7 +412,7 @@ private void renderPage(int page) {
             return;
         }
 
-        boolean fuelLike = "FUEL".equals(parsed.documentKind)
+        boolean fuelLike = "Yakıt".equals(parsed.type) || "FUEL".equals(parsed.documentKind)
                 || (parsed.quantity > 0 && (parsed.amount > 0 || parsed.unitPrice > 0))
                 || ((parsed.fuelType != null && !parsed.fuelType.trim().isEmpty())
                     && (parsed.quantity > 0 || parsed.amount > 0 || parsed.unitPrice > 0));
@@ -675,12 +678,12 @@ private void renderPage(int page) {
         form.addView(formSection("Temel bilgiler", "Zorunlu alanları kısa tuttuk"));
         f.title = formField(form, titleHint(module), initialTitle, InputType.TYPE_CLASS_TEXT);
         f.date = formDate(form, "Tarih", existing == null ? today() : base.date, false);
-        f.km = formField(form, "Kilometre", existing == null ? String.valueOf(vehicle.km) : String.valueOf(base.km), InputType.TYPE_CLASS_NUMBER);
+        f.km = formField(form, "Kilometre (biliniyorsa)", existing == null ? String.valueOf(vehicle.km) : String.valueOf(base.km), InputType.TYPE_CLASS_NUMBER);
 
         if ("Bakım".equals(module)) {
             f.subtype = formSpinner(form, "Bakım türü", new String[]{"Yağ bakımı", "Genel bakım", "Periyodik bakım", "Fren", "Lastik", "Akü", "Klima", "Motor", "Şanzıman", "Elektrik", "Kaporta/Boya", "Diğer"}, base.subtype);
             form.addView(formSection("Değişen parçalar", "Birden fazlasını seçebilirsin"));
-            String[] parts = {"Motor yağı", "Yağ filtresi", "Hava filtresi", "Polen filtresi", "Yakıt filtresi", "Fren balatası", "Fren diski", "Buji", "Akü", "Triger", "Lastik", "Antifriz", "Şanzıman yağı", "Diğer"};
+            String[] parts = {"Motor yağı", "Yağ filtresi", "Hava filtresi", "Polen filtresi", "Yakıt filtresi", "Fren balatası", "Fren diski", "Buji", "Akü", "Triger", "Lastik", "Antifriz", "Şanzıman yağı", "Diferansiyel yağı", "Diğer"};
             Set<String> selected = new HashSet<>(Arrays.asList(base.extra.split("\\|")));
             for (String p : parts) {
                 CheckBox cb = new CheckBox(this);
@@ -737,6 +740,9 @@ private void renderPage(int page) {
             auto.setPadding(0, dp(4), 0, 0);
             form.addView(auto);
         }
+        f.smartStatus = tv("", muted, 11, false);
+        f.smartStatus.setPadding(0, dp(10), 0, 0);
+        form.addView(f.smartStatus);
         content.addView(form);
         gap(content, 14);
 
@@ -748,7 +754,7 @@ private void renderPage(int page) {
     private void saveRecordForm(String module, AppDatabase.Record r, boolean editing, FormRefs f) {
         String title = f.title.getText().toString().trim();
         String date = f.date.getValue();
-        int km = safeInt(f.km.getText().toString(), -1);
+        int km = f.km.getText().toString().trim().isEmpty() ? 0 : safeInt(f.km.getText().toString(), -1);
         if (title.isEmpty()) { toast("Kayıt başlığı boş olamaz"); return; }
         if (date.isEmpty()) { toast("Tarih seçmelisin"); return; }
         if (km < 0) { toast("Kilometreyi kontrol et"); return; }
@@ -968,6 +974,11 @@ private void renderPage(int page) {
         String module = pendingSmartModule;
         if (f == null || module == null) return;
         int found = 0;
+        if (p.nextKm > 0 && f.nextKm != null) { f.nextKm.setText(String.valueOf(p.nextKm)); markSmartField(f.nextKm); found++; }
+        if ("Fotoğraf".equals(source)) {
+            if (p.km <= 0 && f.km != null) f.km.setText("");
+            if ((p.date == null || p.date.isEmpty()) && f.date != null) f.date.value.setText("");
+        }
 
         if (p.date != null && !p.date.isEmpty() && f.date != null) {
             f.date.value.setText(p.date);
@@ -1106,7 +1117,7 @@ private void renderPage(int page) {
         if (p.vendor != null && !p.vendor.isEmpty() && f.title != null &&
                 !"Yakıt".equals(module) && !"Bakım".equals(module) &&
                 f.title.getText().toString().trim().equals(defaultTitle(module))) {
-            f.title.setText(p.vendor + " - " + moduleTitle(module));
+            f.title.setText(p.vendor + " - " + ("Sigorta/Kasko".equals(module) && !p.insuranceSubtype.isEmpty() ? p.insuranceSubtype : moduleTitle(module)));
             markSmartField(f.title);
         }
 
@@ -1138,7 +1149,7 @@ private void renderPage(int page) {
         } else if ("Ekspertiz".equals(module)) {
             items.add("Rapor özeti " + ((p.detailSummary != null && !p.detailSummary.isEmpty()) ? "✓" : "okunamadı"));
         }
-        if (p.confidence > 0) items.add("Belge güveni %" + p.confidence);
+        if (!p.warnings.isEmpty()) items.add(join(new ArrayList<>(p.warnings), " • "));
         return source + " sonucu • " + join(items, " • ") + "\nOkunamayan alanları manuel gir; otomatik kayıt yapılmadı.";
     }
 
@@ -2205,7 +2216,7 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
                 }
                 toast("Ses anlaşılamadı");
             } else {
-                RecordParser.Parsed parsed = RecordParser.fromText(spoken);
+                RecordParser.Parsed parsed = RecordParser.fromVoice(spoken);
                 if (assistantInputActive) handleAssistantResult(parsed, "Ses");
                 else handleSmartResult(parsed, "Ses");
             }
@@ -2365,4 +2376,10 @@ private void createVehiclePdf() {
 
     private String truncate(String s,int max) { return s.length()<=max?s:s.substring(0,max-1)+"…"; }
     private void toast(String s) { Toast.makeText(this,s,Toast.LENGTH_SHORT).show(); }
+    @Override protected void onStop() {
+        if(obdView!=null){obdView.pauseConnection();}
+        super.onStop();
+    }
+
 }
+
