@@ -70,6 +70,7 @@ public final class SmartDocumentAnalyzer {
         if (p.amount > 0 && p.amount < 10_000_000) score += 2;
         if (p.fuelType != null && !p.fuelType.isEmpty()) score += 3;
         if (!knownVendor(n).isEmpty()) score += 2;
+        if (isFuelVendor(n)) score += 3;
         if (containsAny(n, "akaryakit", "motorin", "dizel", "benzin", "kursunsuz", "otogaz", "lpg", "pompa", "tabanca", "litre", "tl/lt", "tl/l")) score += 3;
         if (Pattern.compile("(?i)[0-9]{1,4}(?:[.,][0-9]{1,3})?\\s*(?:lt|l|litre)\\s*[x×*]\\s*[0-9]{1,5}(?:[.,][0-9]{1,3})?").matcher(raw).find()) score += 6;
         return score >= 6;
@@ -323,7 +324,7 @@ public final class SmartDocumentAnalyzer {
 
     private static double labelledDecimal(String raw, String[] labels) {
         String[] lines=raw.split("\\r?\\n"); Pattern num=Pattern.compile("([0-9]{1,7}(?:[.,][0-9]{1,3})?)");
-        for(String line:lines){String n=normalize(line); boolean ok=false; for(String label:labels) if(n.contains(normalize(label))){ok=true;break;} if(!ok) continue; Matcher m=num.matcher(line); while(m.find()){double v=dec(m.group(1)); if(v>0) return v;}}
+        for(int i=0;i<lines.length;i++){String n=normalize(lines[i]); boolean ok=false; for(String label:labels) if(n.contains(normalize(label))){ok=true;break;} if(!ok) continue; for(int j=i;j<=Math.min(i+2,lines.length-1);j++){Matcher m=num.matcher(lines[j]); while(m.find()){double v=dec(m.group(1)); if(v>0) return v;}}}
         return 0;
     }
 
@@ -331,6 +332,10 @@ public final class SmartDocumentAnalyzer {
 
     private static double money(String token) { if(token==null)return 0; String s=token.trim().replace(" ",""); int comma=s.lastIndexOf(','),dot=s.lastIndexOf('.'); try{if(comma>=0&&dot>=0){if(comma>dot)s=s.replace(".","").replace(',','.');else s=s.replace(",","");}else if(comma>=0){s=s.replace(".","").replace(',','.');}else if(dot>=0){int after=s.length()-dot-1;if(after==3)s=s.replace(".","");}return Double.parseDouble(s);}catch(Exception e){return 0;} }
     private static double dec(String token) { if(token==null)return 0; try{return Double.parseDouble(token.replace(',','.'));}catch(Exception e){return 0;} }
+
+    private static boolean isFuelVendor(String n) {
+        return containsAny(n, "shell", "opet", "petrol ofisi", "totalenergies", "total energies", "bp", "aytemiz", "alpet", "turkiye petrolleri", "tp petrol", "kadoil", "sunpet", "socar", "lukoil", "moil", "termo");
+    }
 
     private static String knownVendor(String n) {
         String[][] known={{"shell","Shell"},{"opet","Opet"},{"petrol ofisi","Petrol Ofisi"},{"totalenergies","TotalEnergies"},{"total energies","TotalEnergies"},{"bp","BP"},{"aytemiz","Aytemiz"},{"alpet","Alpet"},{"turkiye petrolleri","Türkiye Petrolleri"},{"tp petrol","Türkiye Petrolleri"},{"kadoil","Kadoil"},{"sunpet","Sunpet"},{"socar","SOCAR"},{"lukoil","Lukoil"},{"moil","MOil"},{"termo","Termopet"},{"allianz","Allianz"},{"anadolu sigorta","Anadolu Sigorta"},{"turkiye sigorta","Türkiye Sigorta"},{"axa","AXA"},{"mapfre","MAPFRE"},{"hdi","HDI Sigorta"},{"sompo","Sompo"},{"quick sigorta","Quick Sigorta"},{"ray sigorta","Ray Sigorta"},{"zurich","Zurich"},{"neova","Neova"},{"unico","Unico Sigorta"},{"tuvturk","TÜVTÜRK"}};

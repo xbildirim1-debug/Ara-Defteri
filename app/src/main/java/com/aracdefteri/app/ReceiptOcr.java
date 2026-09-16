@@ -2,6 +2,11 @@ package com.aracdefteri.app;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
+import android.graphics.Paint;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
@@ -12,6 +17,7 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Cihaz üzerinde çalışan OCR katmanı.
@@ -42,15 +48,10 @@ public final class ReceiptOcr {
             TextRecognizer recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             recognizer.process(image)
                     .addOnSuccessListener(text -> {
-                        try {
-                            if (text == null || text.getText().trim().isEmpty()) {
-                                callback.onError(new IOException("Belgede okunabilir metin bulunamadı"));
-                            } else {
-                                callback.onResult(RecordParser.fromText(text.getText()));
-                            }
-                        } finally {
-                            recognizer.close();
-                        }
+                        String original = text == null ? "" : text.getText().trim();
+                        // Fiş/gösterge fotoğraflarında küçük LCD ve termal yazılar ilk geçişte
+                        // kaçabiliyor. İkinci, yüksek kontrastlı geçişi birleştiriyoruz.
+                        processEnhancedImage(context, imageUri, recognizer, original, callback);
                     })
                     .addOnFailureListener(error -> {
                         try { callback.onError(error); }
@@ -59,6 +60,81 @@ public final class ReceiptOcr {
         } catch (IOException e) {
             callback.onError(e);
         }
+    }
+
+    private static void processEnhancedImage(Context context, Uri imageUri, TextRecognizer recognizer,
+                                             String originalText, Callback callback) {
+        Bitmap source = null;
+        Bitmap scaled = null;
+        Bitmap enhanced = null;
+        try {
+            try (InputStream in = context.getContentResolver().openInputStream(imageUri)) {
+                source = BitmapFactory.decodeStream(in);
+            }
+            if (source == null) {
+                finishImageRecognition(recognizer, originalText, "", callback);
+                return;
+            }
+            int maxWidth = 2000;
+            if (source.getWidth() > maxWidth) {
+                int h = Math.max(1, Math.round(source.getHeight() * (maxWidth / (float) source.getWidth())));
+                scaled = Bitmap.createScaledBitmap(source, maxWidth, h, true);
+            } else {
+                scaled = source;
+            }
+            enhanced = Bitmap.createBitmap(scaled.getWidth(), scaled.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(enhanced);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            ColorMatrix saturation = new ColorMatrix();
+            saturation.setSaturation(0f);
+            ColorMatrix contrast = new ColorMatrix(new float[]{
+                    1.75f,0,0,0,-95,
+                    0,1.75f,0,0,-95,
+                    0,0,1.75f,0,-95,
+                    0,0,0,1,0
+            });
+            saturation.postConcat(contrast);
+            paint.setColorFilter(new ColorMatrixColorFilter(saturation));
+            canvas.drawBitmap(scaled, 0, 0, paint);
+
+            final Bitmap finalEnhanced = enhanced;
+            final Bitmap finalSource = source;
+            final Bitmap finalScaled = scaled;
+            recognizer.process(InputImage.fromBitmap(finalEnhanced, 0))
+                    .addOnSuccessListener(text -> {
+                        String enhancedText = text == null ? "" : text.getText().trim();
+                        recycle(finalEnhanced, finalScaled, finalSource);
+                        finishImageRecognition(recognizer, originalText, enhancedText, callback);
+                    })
+                    .addOnFailureListener(error -> {
+                        recycle(finalEnhanced, finalScaled, finalSource);
+                        finishImageRecognition(recognizer, originalText, "", callback);
+                    });
+        } catch (Exception e) {
+            recycle(enhanced, scaled, source);
+            finishImageRecognition(recognizer, originalText, "", callback);
+        }
+    }
+
+    private static void finishImageRecognition(TextRecognizer recognizer, String original, String enhanced, Callback callback) {
+        try {
+            String combined;
+            if (original == null) original = "";
+            if (enhanced == null) enhanced = "";
+            if (original.trim().isEmpty()) combined = enhanced.trim();
+            else if (enhanced.trim().isEmpty() || enhanced.trim().equals(original.trim())) combined = original.trim();
+            else combined = original.trim() + "\n--- IKINCI OKUMA ---\n" + enhanced.trim();
+            if (combined.isEmpty()) callback.onError(new IOException("Belgede okunabilir metin bulunamadı"));
+            else callback.onResult(RecordParser.fromText(combined));
+        } finally {
+            recognizer.close();
+        }
+    }
+
+    private static void recycle(Bitmap enhanced, Bitmap scaled, Bitmap source) {
+        if (enhanced != null && !enhanced.isRecycled()) enhanced.recycle();
+        if (scaled != null && scaled != source && !scaled.isRecycled()) scaled.recycle();
+        if (source != null && !source.isRecycled()) source.recycle();
     }
 
     private static void processPdf(Context context, Uri pdfUri, Callback callback) {
