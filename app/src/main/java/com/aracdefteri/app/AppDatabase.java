@@ -57,6 +57,15 @@ public class AppDatabase extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE photos (id INTEGER PRIMARY KEY AUTOINCREMENT, uri TEXT, date TEXT)");
         db.execSQL("CREATE TABLE record_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL, uri TEXT NOT NULL, date TEXT DEFAULT '')");
         db.execSQL("CREATE INDEX idx_record_photos_record_id ON record_photos(record_id)");
+        ContentValues blankVehicle = new ContentValues();
+        blankVehicle.put("id", 1);
+        blankVehicle.put("brand", "");
+        blankVehicle.put("model", "");
+        blankVehicle.put("year", 0);
+        blankVehicle.put("plate", "");
+        blankVehicle.put("km", 0);
+        blankVehicle.put("fuel_type", "Benzin");
+        db.insert("vehicle", null, blankVehicle);
     }
 
     @Override
@@ -141,7 +150,27 @@ public class AppDatabase extends SQLiteOpenHelper {
     public void updateVehicle(String brand, String model, int year, String plate, int km, String fuelType) {
         ContentValues v = new ContentValues();
         v.put("brand", brand); v.put("model", model); v.put("year", year); v.put("plate", plate); v.put("km", km); v.put("fuel_type", fuelType);
-        getWritableDatabase().update("vehicle", v, "id=1", null);
+        SQLiteDatabase w = getWritableDatabase();
+        int changed = w.update("vehicle", v, "id=1", null);
+        if (changed == 0) { v.put("id", 1); w.insert("vehicle", null, v); }
+    }
+
+    public boolean clearLegacyDemoIfPresent() {
+        Vehicle v = getVehicle();
+        if (!("Toyota".equals(v.brand) && "Corolla Hybrid".equals(v.model) && v.year == 2021)) return false;
+        Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM records WHERE title IN ('Periyodik bakım','Yıllık genel kontrol','Sağ arka tampon çizik onarımı','Periyodik muayene')", null);
+        c.moveToFirst();
+        int seeded = c.getInt(0);
+        c.close();
+        if (seeded < 2) return false;
+        SQLiteDatabase w = getWritableDatabase();
+        w.delete("record_photos", null, null);
+        w.delete("records", null, null);
+        w.delete("expenses", null, null);
+        w.delete("photos", null, null);
+        updateVehicle("", "", 0, "", 0, "Benzin");
+        return true;
     }
 
     public long addRecord(Record r) {

@@ -205,6 +205,16 @@ public final class SmartDocumentAnalyzer {
     private static int hits(String n, int weight, String... keys) { int score = 0; for (String k : keys) if (n.contains(k)) score += weight; return score; }
 
     private static int extractBestKm(String raw) {
+        // Gösterge panelinde ODO etiketi varsa önce hemen yanındaki/altındaki toplam kilometreyi al.
+        Matcher odo = Pattern.compile("(?is)(?:\\bODO\\b|ODOMETER|ODOMETRE|TOPLAM\\s*KM|KILOMETRE)\\s*[:=.-]?\\s*([0-9][0-9 .]{3,9})").matcher(raw);
+        if (odo.find()) {
+            String digits = odo.group(1).replaceAll("[^0-9]", "");
+            try {
+                int value = Integer.parseInt(digits);
+                if (value >= 1000 && value < 2_000_000 && !looksLikeGaugeScale(value)) return value;
+            } catch (Exception ignored) { }
+        }
+
         String[] lines = raw.split("\\r?\\n"); int bestValue = 0; int bestScore = Integer.MIN_VALUE;
         Pattern number = Pattern.compile("(?<!\\d)(\\d{1,7}(?:[ .]\\d{3})*|\\d{1,7})(?!\\d)");
         for (String line : lines) {
@@ -221,11 +231,18 @@ public final class SmartDocumentAnalyzer {
                 if (digits.length() >= 5) score += 2;
                 if (containsAny(n, "trip", "seyahat", "menzil", "range")) score -= 9;
                 if (containsAny(n, "rpm", "devir", "km/h", "hiz")) score -= 5;
+                if (looksLikeGaugeScale(value)) score -= 14;
                 if (line.contains(",") || line.matches(".*\\d+\\.\\d+.*")) score -= 3;
-                if (score > bestScore) { bestScore = score; bestValue = value; }
+                if (score > bestScore || (score == bestScore && value > bestValue)) { bestScore = score; bestValue = value; }
             }
         }
         return bestScore >= 5 ? bestValue : 0;
+    }
+
+    private static boolean looksLikeGaugeScale(int value) {
+        int[] suspicious = {100120,120140,140160,160180,180200,200220,2040,4060,6080,80100};
+        for (int v : suspicious) if (value == v) return true;
+        return false;
     }
 
     private static String extractPlate(String raw) {

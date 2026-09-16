@@ -80,6 +80,8 @@ public class NextMainActivity extends Activity {
     private FormRefs pendingSmartForm;
     private String pendingSmartModule;
     private Uri pendingOcrCameraUri;
+    private boolean assistantInputActive = false;
+    private TextView assistantStatus;
 
     private int bg, surface, surface2, text, muted, accent, accentSoft, warning, danger, stroke, success;
 
@@ -88,7 +90,10 @@ public class NextMainActivity extends Activity {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         db = new AppDatabase(this);
-        db.seedDemoIfNeeded();
+        if (!prefs.getBoolean("legacy_demo_cleanup_v12", false)) {
+            db.clearLegacyDemoIfPresent();
+            prefs.edit().putBoolean("legacy_demo_cleanup_v12", true).apply();
+        }
         resolveTheme();
         ReminderScheduler.ensureChannel(this);
         requestNotificationPermissionIfNeeded();
@@ -157,8 +162,8 @@ public class NextMainActivity extends Activity {
 
 private void buildBottomNav() {
         navBar.removeAllViews();
-        String[] labels = {"Ana Sayfa", "Kayıtlar", "Araç CV", "Ayarlar"};
-        int[] icons = {R.drawable.ic_nav_home, R.drawable.ic_nav_records, R.drawable.ic_nav_cv, R.drawable.ic_nav_settings};
+        String[] labels = {"Ana Sayfa", "Kayıtlar", "Asistan", "Araç CV", "Ayarlar"};
+        int[] icons = {R.drawable.ic_nav_home, R.drawable.ic_nav_records, R.drawable.ic_nav_assistant, R.drawable.ic_nav_cv, R.drawable.ic_nav_settings};
         for (int i = 0; i < labels.length; i++) {
             final int page = i;
             boolean active = currentModule == null && currentPage == i && selectedRecordId < 0;
@@ -202,7 +207,8 @@ private void renderPage(int page) {
         LinearLayout content = newContent();
         if (page == 0) renderHome(content);
         else if (page == 1) renderRecordsHub(content);
-        else if (page == 2) renderCv(content);
+        else if (page == 2) renderAssistant(content);
+        else if (page == 3) renderCv(content);
         else renderSettings(content);
     }
 
@@ -228,7 +234,16 @@ private void renderPage(int page) {
     private void renderHome(LinearLayout content) {
         addHeader(content, "Taşıtım", "Taşıtının dijital hafızası");
         AppDatabase.Vehicle vehicle = db.getVehicle();
-        content.addView(vehicleHero(vehicle));
+        if (vehicle.brand == null || vehicle.brand.trim().isEmpty() || vehicle.model == null || vehicle.model.trim().isEmpty()) {
+            LinearLayout emptyVehicle = infoCard("Henüz araç eklenmedi", "Araç bilgilerini eklediğinde kilometre, kayıtlar ve Araç CV burada oluşmaya başlar.", accent);
+            content.addView(emptyVehicle);
+            gap(content, 10);
+            Button addVehicle = primaryButton("Araç bilgilerini ekle");
+            addVehicle.setOnClickListener(v -> openVehicleForm());
+            content.addView(addVehicle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        } else {
+            content.addView(vehicleHero(vehicle));
+        }
         gap(content, 20);
 
         sectionTitle(content, "Yaklaşanlar", "Yaklaşan işlem ve bitiş tarihleri");
@@ -328,6 +343,109 @@ private void renderPage(int page) {
         grid.setColumnCount(2);
         for (String module : modules) addModuleTile(grid, module);
         content.addView(grid);
+    }
+
+
+    private void renderAssistant(LinearLayout content) {
+        addHeader(content, "Asistan", "Konuş, fotoğraf çek veya belge seç; kayıt türünü Taşıtım bulsun");
+
+        LinearLayout hero = card();
+        hero.setPadding(dp(16), dp(16), dp(16), dp(16));
+        hero.addView(tv("Ne yaptığını söylemen yeterli", text, 17, true));
+        TextView help = tv("Örnek: “Kilometrem 321.609 oldu.” • “10 litre yakıt aldım, 873 lira.” • “Kasko poliçem 12 Mart 2027'de bitiyor.”", muted, 10, false);
+        help.setPadding(0, dp(5), 0, dp(13));
+        hero.addView(help);
+
+        Button voice = primaryButton("🎤  Konuşarak ekle");
+        voice.setOnClickListener(v -> {
+            assistantInputActive = true;
+            pendingSmartForm = null;
+            pendingSmartModule = null;
+            startSmartVoice();
+        });
+        hero.addView(voice, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        gap(hero, 9);
+
+        LinearLayout imageActions = new LinearLayout(this);
+        imageActions.setOrientation(LinearLayout.HORIZONTAL);
+        Button camera = secondaryButton("📷 Kamera");
+        Button file = secondaryButton("▣ Fotoğraf / PDF");
+        camera.setOnClickListener(v -> {
+            assistantInputActive = true;
+            pendingSmartForm = null;
+            pendingSmartModule = null;
+            captureOcrImage();
+        });
+        file.setOnClickListener(v -> {
+            assistantInputActive = true;
+            pendingSmartForm = null;
+            pendingSmartModule = null;
+            pickOcrImage();
+        });
+        imageActions.addView(camera, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        gapHorizontal(imageActions, 8);
+        imageActions.addView(file, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        hero.addView(imageActions);
+
+        assistantStatus = tv("Hazır. Veriyi söyle veya belge/gösterge fotoğrafını okut.", muted, 10, false);
+        assistantStatus.setPadding(0, dp(12), 0, 0);
+        hero.addView(assistantStatus);
+        content.addView(hero);
+
+        gap(content, 16);
+        sectionTitle(content, "Neleri anlayabilir?", "Tek merkezden araç kayıtlarını hazırlar");
+        content.addView(infoCard("Kilometre ve yakıt", "Gösterge paneli, ODO değeri, yakıt fişi, litre/kWh, birim fiyat ve toplam tutar.", accent));
+        gap(content, 8);
+        content.addView(infoCard("Bakım ve hasar", "Servis faturası, yapılan işlemler, değişen parçalar, hasar ve onarım bilgileri.", accent));
+        gap(content, 8);
+        content.addView(infoCard("Muayene, sigorta, vergi, ekspertiz", "Belge türünü ayırır ve uygun kayıt formunu doldurur; kaydetmeden önce sen kontrol edersin.", accent));
+    }
+
+    private void handleAssistantResult(RecordParser.Parsed parsed, String source) {
+        assistantInputActive = false;
+        if (parsed == null) {
+            if (assistantStatus != null) assistantStatus.setText(source + " sonucu okunamadı.");
+            toast("Veri okunamadı");
+            return;
+        }
+
+        boolean odometerOnly = "ODOMETER".equals(parsed.documentKind) ||
+                ((parsed.type == null || parsed.type.trim().isEmpty()) && parsed.km > 0);
+        if (odometerOnly) {
+            if (parsed.km <= 0) {
+                if (assistantStatus != null) assistantStatus.setText("Kilometre değeri güvenle okunamadı. Manuel giriş yapabilirsin.");
+                toast("Kilometre okunamadı");
+                return;
+            }
+            AppDatabase.Vehicle current = db.getVehicle();
+            String message = "Okunan kilometre: " + formatInt(parsed.km) + " km";
+            if (current.km > 0) message += "\nMevcut kilometre: " + formatInt(current.km) + " km";
+            new AlertDialog.Builder(this)
+                    .setTitle("Kilometreyi güncelle?")
+                    .setMessage(message)
+                    .setNegativeButton("Vazgeç", null)
+                    .setPositiveButton("Güncelle", (d, w) -> {
+                        db.updateVehicle(current.brand, current.model, current.year, current.plate, parsed.km, current.fuelType);
+                        toast("Kilometre " + formatInt(parsed.km) + " km olarak güncellendi");
+                        renderPage(2);
+                    })
+                    .show();
+            return;
+        }
+
+        String detected = parsed.type == null ? "" : normalizeModule(parsed.type.trim());
+        if (detected.isEmpty()) {
+            if (assistantStatus != null) assistantStatus.setText("Kayıt türü belirlenemedi. Daha net söyle veya farklı bir fotoğraf dene.");
+            toast("Kayıt türü belirlenemedi");
+            return;
+        }
+        if ("Giderler".equals(detected)) {
+            if (assistantStatus != null) assistantStatus.setText("Gider kaydı algılandı; ayrıntıları manuel kontrol et.");
+            openExpenseForm(null);
+            return;
+        }
+        openRecordForm(detected, null);
+        applyParsedToCurrentForm(parsed, source);
     }
 
     private void addModuleTile(GridLayout grid, String module) {
@@ -546,8 +664,6 @@ private void renderPage(int page) {
         LinearLayout form = card();
         form.setPadding(dp(16), dp(16), dp(16), dp(16));
         form.addView(formSection("Temel bilgiler", "Zorunlu alanları kısa tuttuk"));
-        form.addView(smartInputPanel(module, f));
-        gap(form, 12);
         f.title = formField(form, titleHint(module), initialTitle, InputType.TYPE_CLASS_TEXT);
         f.date = formDate(form, "Tarih", existing == null ? today() : base.date, false);
         f.km = formField(form, "Kilometre", existing == null ? String.valueOf(vehicle.km) : String.valueOf(base.km), InputType.TYPE_CLASS_NUMBER);
@@ -760,7 +876,10 @@ private void renderPage(int page) {
             toast("Bu cihazda konuşma tanıma hizmeti bulunamadı");
             return;
         }
-        if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+        if (assistantInputActive && assistantStatus != null) {
+            assistantStatus.setText("Dinliyorum… Kaydı doğal şekilde anlat.");
+            assistantStatus.setTextColor(accent);
+        } else if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
             pendingSmartForm.smartStatus.setText("Dinlemeye hazır… Kaydı doğal şekilde anlat.");
             pendingSmartForm.smartStatus.setTextColor(accent);
         }
@@ -768,11 +887,14 @@ private void renderPage(int page) {
     }
 
     private void processOcrImage(Uri uri, boolean temporaryCameraImage) {
-        if (uri == null || pendingSmartForm == null || pendingSmartModule == null) {
+        if (uri == null || (!assistantInputActive && (pendingSmartForm == null || pendingSmartModule == null))) {
             if (temporaryCameraImage) cleanupOcrCameraImage();
             return;
         }
-        if (pendingSmartForm.smartStatus != null) {
+        if (assistantInputActive && assistantStatus != null) {
+            assistantStatus.setText("Belge cihaz üzerinde okunuyor…");
+            assistantStatus.setTextColor(accent);
+        } else if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
             pendingSmartForm.smartStatus.setText("Belge cihaz üzerinde okunuyor…");
             pendingSmartForm.smartStatus.setTextColor(accent);
         }
@@ -781,7 +903,8 @@ private void renderPage(int page) {
             public void onResult(RecordParser.Parsed result) {
                 runOnUiThread(() -> {
                     if (temporaryCameraImage) cleanupOcrCameraImage();
-                    handleSmartResult(result, "Fotoğraf");
+                    if (assistantInputActive) handleAssistantResult(result, "Fotoğraf");
+                    else handleSmartResult(result, "Fotoğraf");
                 });
             }
 
@@ -789,7 +912,11 @@ private void renderPage(int page) {
             public void onError(Exception error) {
                 runOnUiThread(() -> {
                     if (temporaryCameraImage) cleanupOcrCameraImage();
-                    if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+                    if (assistantInputActive && assistantStatus != null) {
+                        assistantInputActive = false;
+                        assistantStatus.setText("Fotoğraf okunamadı — daha net çek veya manuel giriş yap.");
+                        assistantStatus.setTextColor(warning);
+                    } else if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
                         pendingSmartForm.smartStatus.setText("Fotoğraf okunamadı — alanları manuel girebilirsin.");
                         pendingSmartForm.smartStatus.setTextColor(warning);
                     }
@@ -1140,7 +1267,7 @@ private void renderPage(int page) {
             del.setOnClickListener(v -> new AlertDialog.Builder(this)
                     .setTitle("Fotoğraf silinsin mi?")
                     .setNegativeButton("Vazgeç",null)
-                    .setPositiveButton("Sil",(d,w)->{ db.deletePhoto(p.id); renderPage(2); })
+                    .setPositiveButton("Sil",(d,w)->{ db.deletePhoto(p.id); renderPage(3); })
                     .show());
             footer.addView(del);
             c.addView(footer);
@@ -1151,6 +1278,15 @@ private void renderPage(int page) {
 
 private void renderCv(LinearLayout content) {
         AppDatabase.Vehicle v = db.getVehicle();
+        if (v.brand == null || v.brand.trim().isEmpty() || v.model == null || v.model.trim().isEmpty()) {
+            addHeader(content, "Araç CV", "Önce araç bilgilerini ekle");
+            content.addView(infoCard("CV için araç bilgisi gerekli", "Araç profili boş. Marka, model, yıl ve kilometreyi ekledikten sonra CV oluşturabilirsin.", accent));
+            gap(content, 10);
+            Button add = primaryButton("Araç bilgilerini ekle");
+            add.setOnClickListener(x -> openVehicleForm());
+            content.addView(add, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+            return;
+        }
         String cvVariant = prefs.getString("vehicle_catalog_variant", "").trim();
         if (cvVariant.isEmpty()) {
             cvVariant = (prefs.getString("vehicle_engine", "") + " " + prefs.getString("vehicle_trim", "")).trim();
@@ -1199,7 +1335,7 @@ private void renderCv(LinearLayout content) {
         Button clear = secondaryButton("Temizle");
         clear.setEnabled(!cvPhotoUris.isEmpty());
         clear.setAlpha(cvPhotoUris.isEmpty() ? 0.45f : 1f);
-        clear.setOnClickListener(vw -> { cvPhotoUris.clear(); renderPage(2); });
+        clear.setOnClickListener(vw -> { cvPhotoUris.clear(); renderPage(3); });
         photoActions.addView(clear, new LinearLayout.LayoutParams(0,dp(41),1f));
         photoCard.addView(photoActions);
         content.addView(photoCard);
@@ -1208,6 +1344,21 @@ private void renderCv(LinearLayout content) {
         sectionTitle(content, "PDF seçenekleri", "İsteğe bağlı bilgileri seç");
         LinearLayout options = card();
         options.setPadding(dp(12),dp(10),dp(12),dp(11));
+
+        options.addView(tv("CV'ye eklenecek bölümler", text, 12, true));
+        TextView sectionHelp = tv("İstemediğin bölümü kapat; PDF'ye hiç eklenmez.", muted, 9, false);
+        sectionHelp.setPadding(0, dp(2), 0, dp(5));
+        options.addView(sectionHelp);
+        CheckBox cvMaintenance = cvSectionOption(options, "Bakım & Onarım", "cv_include_maintenance", true);
+        CheckBox cvInspection = cvSectionOption(options, "Muayene", "cv_include_inspection", true);
+        CheckBox cvDamage = cvSectionOption(options, "Hasar geçmişi ve hasar fotoğrafları", "cv_include_damage", true);
+        CheckBox cvExpertise = cvSectionOption(options, "Ekspertiz", "cv_include_expertise", true);
+        CheckBox cvInsurance = cvSectionOption(options, "Sigorta & Kasko", "cv_include_insurance", true);
+        CheckBox cvTax = cvSectionOption(options, "Vergi / resmî ödemeler", "cv_include_tax", true);
+        CheckBox cvFuel = cvSectionOption(options, "Yakıt / enerji geçmişi", "cv_include_fuel", false);
+        CheckBox cvExpenses = cvSectionOption(options, "Diğer giderler", "cv_include_expenses", false);
+        CheckBox cvPhotos = cvSectionOption(options, "Seçtiğim araç fotoğrafları", "cv_include_photos", true);
+        gap(options, 6);
 
         CheckBox showCosts = new CheckBox(this);
         showCosts.setText("Maliyetleri göster");
@@ -1244,6 +1395,15 @@ private void renderCv(LinearLayout content) {
             }
             prefs.edit()
                     .putBoolean("cv_show_plate", false)
+                    .putBoolean("cv_include_maintenance", cvMaintenance.isChecked())
+                    .putBoolean("cv_include_inspection", cvInspection.isChecked())
+                    .putBoolean("cv_include_damage", cvDamage.isChecked())
+                    .putBoolean("cv_include_expertise", cvExpertise.isChecked())
+                    .putBoolean("cv_include_insurance", cvInsurance.isChecked())
+                    .putBoolean("cv_include_tax", cvTax.isChecked())
+                    .putBoolean("cv_include_fuel", cvFuel.isChecked())
+                    .putBoolean("cv_include_expenses", cvExpenses.isChecked())
+                    .putBoolean("cv_include_photos", cvPhotos.isChecked())
                     .putBoolean("cv_show_costs", showCosts.isChecked())
                     .putBoolean("cv_show_price", showPrice.isChecked())
                     .putString("cv_sale_price", salePrice.getText().toString().trim())
@@ -1253,6 +1413,16 @@ private void renderCv(LinearLayout content) {
             createVehiclePdf();
         });
         content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(50)));
+    }
+
+    private CheckBox cvSectionOption(LinearLayout parent, String label, String prefKey, boolean defaultValue) {
+        CheckBox box = new CheckBox(this);
+        box.setText(label);
+        box.setTextColor(text);
+        box.setTextSize(11);
+        box.setChecked(prefs.getBoolean(prefKey, defaultValue));
+        parent.addView(box);
+        return box;
     }
 
     private void renderSettings(LinearLayout content) {
@@ -1689,7 +1859,7 @@ private void openVehicleForm() {
         frame.addView(remove,rp);
         remove.setOnClickListener(v -> {
             cvPhotoUris.remove(uri);
-            renderPage(2);
+            renderPage(3);
         });
         return frame;
     }
@@ -2016,13 +2186,19 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         if (requestCode == VoiceInput.REQUEST_CODE) {
             String spoken = VoiceInput.extract(data);
             if (spoken.isEmpty()) {
-                if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
+                if (assistantInputActive && assistantStatus != null) {
+                    assistantInputActive = false;
+                    assistantStatus.setText("Ses anlaşılamadı — tekrar deneyebilirsin.");
+                    assistantStatus.setTextColor(warning);
+                } else if (pendingSmartForm != null && pendingSmartForm.smartStatus != null) {
                     pendingSmartForm.smartStatus.setText("Ses anlaşılamadı — alanları manuel girebilirsin.");
                     pendingSmartForm.smartStatus.setTextColor(warning);
                 }
                 toast("Ses anlaşılamadı");
             } else {
-                handleSmartResult(RecordParser.fromText(spoken), "Ses");
+                RecordParser.Parsed parsed = RecordParser.fromText(spoken);
+                if (assistantInputActive) handleAssistantResult(parsed, "Ses");
+                else handleSmartResult(parsed, "Ses");
             }
             return;
         }
@@ -2050,7 +2226,7 @@ protected void onActivityResult(int requestCode,int resultCode,Intent data) {
             }
             if (added > 0) toast(added + " araç resmi eklendi");
             else if (cvPhotoUris.isEmpty()) toast("Fotoğraf seçilemedi");
-            renderPage(2);
+            renderPage(3);
             return;
         }
 

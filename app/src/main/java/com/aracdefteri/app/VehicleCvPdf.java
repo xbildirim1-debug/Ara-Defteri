@@ -59,8 +59,8 @@ public final class VehicleCvPdf {
         w.headerTitle = fullVehicleName(vehicle, prefs);
         try {
             drawCover(activity, w, vehicle, prefs, documentNo, showPlate);
-            drawHistory(activity, w, db, showCosts);
-            drawPhotos(activity, w, selectedPhotos);
+            drawHistory(activity, w, db, showCosts, prefs);
+            if (prefs.getBoolean("cv_include_photos", true)) drawPhotos(activity, w, selectedPhotos);
             w.finish();
 
             String fileName = "Tasitim-CV-" + documentNo.replace("-", "") + ".pdf";
@@ -180,11 +180,14 @@ public final class VehicleCvPdf {
         }
     }
 
-    private static void drawHistory(Activity activity, Writer w, AppDatabase db, boolean showCosts) {
+    private static void drawHistory(Activity activity, Writer w, AppDatabase db, boolean showCosts, SharedPreferences prefs) {
         List<AppDatabase.Record> all = db.getRecords(500);
-        String[] types = {"Bakım", "Hasar", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};
-        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
+        String[] types = {"Bakım", "Hasar", "Ekspertiz", "Muayene", "Sigorta/Kasko", "Vergi", "Yakıt"};
+        String[] titles = {"Bakım & Onarım", "Hasar Geçmişi", "Ekspertiz", "Muayene", "Sigorta & Kasko", "Vergi / Resmî Ödemeler", "Yakıt / Enerji"};
+        String[] keys = {"cv_include_maintenance", "cv_include_damage", "cv_include_expertise", "cv_include_inspection", "cv_include_insurance", "cv_include_tax", "cv_include_fuel"};
+        boolean[] defaults = {true, true, true, true, true, true, false};
         for (int i = 0; i < types.length; i++) {
+            if (!prefs.getBoolean(keys[i], defaults[i])) continue;
             List<AppDatabase.Record> group = recordsOfType(all, types[i]);
             if (group.isEmpty()) continue;
             w.ensure(70);
@@ -193,6 +196,19 @@ public final class VehicleCvPdf {
             for (AppDatabase.Record r : group) {
                 w.recordCard(r, showCosts);
                 if ("Hasar".equals(r.type)) drawDamagePhotos(activity, w, db.getRecordPhotos(r.id));
+            }
+        }
+
+        if (prefs.getBoolean("cv_include_expenses", false)) {
+            List<AppDatabase.Expense> expenses = db.getExpenses();
+            if (!expenses.isEmpty()) {
+                w.ensure(70);
+                w.y += 3;
+                w.section("Diğer Giderler", null);
+                for (AppDatabase.Expense e : expenses) {
+                    String subtitle = e.date + (e.note == null || e.note.trim().isEmpty() ? "" : " • " + e.note.trim());
+                    w.simpleCard(e.category, subtitle, showCosts && e.amount > 0 ? formatMoney(e.amount) : "");
+                }
             }
         }
     }
