@@ -1,0 +1,40 @@
+name: Apply v0.14 Visual OCR
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "scripts/upgrade_v014_visual_ocr.py"
+      - ".github/workflows/apply-v014-visual-ocr.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.14 visual OCR upgrade
+        run: python3 scripts/upgrade_v014_visual_ocr.py
+
+      - name: Commit upgraded sources
+        run: |
+          if git diff --quiet; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/VisualDocumentAnalyzer.java \
+                  app/src/main/java/com/aracdefteri/app/ReceiptOcr.java \
+                  app/src/main/java/com/aracdefteri/app/RecordParser.java \
+                  app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java \
+                  app/build.gradle
+          git commit -m "Rebuild visual OCR reliability for odometer receipts expertise and insurance"
+          git push
