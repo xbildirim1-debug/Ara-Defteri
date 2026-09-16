@@ -72,7 +72,7 @@ public final class ReceiptOcr {
                 source = BitmapFactory.decodeStream(in);
             }
             if (source == null) {
-                finishImageRecognition(recognizer, originalText, "", callback);
+                processFocusedImage(context, imageUri, recognizer, originalText, "", callback);
                 return;
             }
             int maxWidth = 2000;
@@ -104,11 +104,11 @@ public final class ReceiptOcr {
                     .addOnSuccessListener(text -> {
                         String enhancedText = text == null ? "" : text.getText().trim();
                         recycle(finalEnhanced, finalScaled, finalSource);
-                        finishImageRecognition(recognizer, originalText, enhancedText, callback);
+                        processFocusedImage(context, imageUri, recognizer, originalText, enhancedText, callback);
                     })
                     .addOnFailureListener(error -> {
                         recycle(finalEnhanced, finalScaled, finalSource);
-                        finishImageRecognition(recognizer, originalText, "", callback);
+                        processFocusedImage(context, imageUri, recognizer, originalText, "", callback);
                     });
         } catch (Exception e) {
             recycle(enhanced, scaled, source);
@@ -116,16 +116,115 @@ public final class ReceiptOcr {
         }
     }
 
-    private static void finishImageRecognition(TextRecognizer recognizer, String original, String enhanced, Callback callback) {
+    private static void processFocusedImage(Context context, Uri imageUri, TextRecognizer recognizer,
+                                            String original, String enhanced, Callback callback) {
+        Bitmap source = null;
         try {
-            String combined;
-            if (original == null) original = "";
-            if (enhanced == null) enhanced = "";
-            if (original.trim().isEmpty()) combined = enhanced.trim();
-            else if (enhanced.trim().isEmpty() || enhanced.trim().equals(original.trim())) combined = original.trim();
-            else combined = original.trim() + "\n--- IKINCI OKUMA ---\n" + enhanced.trim();
-            if (combined.isEmpty()) callback.onError(new IOException("Belgede okunabilir metin bulunamadı"));
-            else callback.onResult(RecordParser.fromText(combined));
+            try (InputStream in = context.getContentResolver().openInputStream(imageUri)) {
+                source = BitmapFactory.decodeStream(in);
+            }
+            if (source == null) {
+                finishImageRecognition(context, imageUri, recognizer, original, enhanced, "", "", callback);
+                return;
+            }
+            int maxWidth = 1800;
+            Bitmap work = source;
+            if (source.getWidth() > maxWidth) {
+                int h = Math.max(1, Math.round(source.getHeight() * (maxWidth / (float) source.getWidth())));
+                work = Bitmap.createScaledBitmap(source, maxWidth, h, true);
+            }
+            final Bitmap finalSource = source;
+            final Bitmap finalWork = work;
+            final Bitmap binary = binaryBitmap(work);
+            recognizer.process(InputImage.fromBitmap(binary, 0))
+                    .addOnSuccessListener(t -> {
+                        String binaryText = t == null ? "" : t.getText().trim();
+                        int x = Math.max(0, (int)(finalWork.getWidth() * .22f));
+                        int y = Math.max(0, (int)(finalWork.getHeight() * .48f));
+                        int w = Math.max(1, Math.min(finalWork.getWidth() - x, (int)(finalWork.getWidth() * .56f)));
+                        int h = Math.max(1, Math.min(finalWork.getHeight() - y, (int)(finalWork.getHeight() * .30f)));
+                        Bitmap crop = Bitmap.createBitmap(finalWork, x, y, w, h);
+                        Bitmap crop2 = Bitmap.createScaledBitmap(crop, Math.min(1800, crop.getWidth()*2), Math.min(900, crop.getHeight()*2), true);
+                        crop.recycle();
+                        recognizer.process(InputImage.fromBitmap(crop2, 0))
+                                .addOnSuccessListener(ct -> {
+                                    String focus = ct == null ? "" : ct.getText().trim();
+                                    crop2.recycle(); binary.recycle();
+                                    if (finalWork != finalSource && !finalWork.isRecycled()) finalWork.recycle();
+                                    if (!finalSource.isRecycled()) finalSource.recycle();
+                                    finishImageRecognition(context, imageUri, recognizer, original, enhanced, binaryText, focus, callback);
+                                })
+                                .addOnFailureListener(e -> {
+                                    crop2.recycle(); binary.recycle();
+                                    if (finalWork != finalSource && !finalWork.isRecycled()) finalWork.recycle();
+                                    if (!finalSource.isRecycled()) finalSource.recycle();
+                                    finishImageRecognition(context, imageUri, recognizer, original, enhanced, binaryText, "", callback);
+                                });
+                    })
+                    .addOnFailureListener(e -> {
+                        binary.recycle();
+                        if (finalWork != finalSource && !finalWork.isRecycled()) finalWork.recycle();
+                        if (!finalSource.isRecycled()) finalSource.recycle();
+                        finishImageRecognition(context, imageUri, recognizer, original, enhanced, "", "", callback);
+                    });
+        } catch (Exception e) {
+            if (source != null && !source.isRecycled()) source.recycle();
+            finishImageRecognition(context, imageUri, recognizer, original, enhanced, "", "", callback);
+        }
+    }
+
+    private static Bitmap binaryBitmap(Bitmap src) {
+        Bitmap out = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+        int w=src.getWidth(), h=src.getHeight();
+        int stepSample=Math.max(1, Math.min(w,h)/500);
+        long sum=0; long count=0;
+        for(int y=0;y<h;y+=stepSample) for(int x=0;x<w;x+=stepSample){
+            int c=src.getPixel(x,y); sum += (android.graphics.Color.red(c)*30 + android.graphics.Color.green(c)*59 + android.graphics.Color.blue(c)*11)/100; count++; }
+        int threshold = count==0 ? 155 : (int)(sum/count);
+        threshold = Math.max(115, Math.min(195, threshold));
+        int[] row=new int[w];
+        for(int y=0;y<h;y++){
+            for(int x=0;x<w;x++){
+                int c=src.getPixel(x,y); int lum=(android.graphics.Color.red(c)*30 + android.graphics.Color.green(c)*59 + android.graphics.Color.blue(c)*11)/100;
+                row[x]= lum < threshold ? android.graphics.Color.BLACK : android.graphics.Color.WHITE;
+            }
+            out.setPixels(row,0,w,0,y,w,1);
+        }
+        return out;
+    }
+
+    private static void finishImageRecognition(Context context, Uri imageUri, TextRecognizer recognizer,
+                                               String original, String enhanced, String binary, String focus,
+                                               Callback callback) {
+        try {
+            StringBuilder all = new StringBuilder();
+            if (original != null && !original.trim().isEmpty()) all.append(original.trim());
+            if (enhanced != null && !enhanced.trim().isEmpty() && !enhanced.trim().equals(original == null ? "" : original.trim())) {
+                if (all.length()>0) all.append("\n--- IKINCI_OKUMA ---\n"); all.append(enhanced.trim());
+            }
+            if (binary != null && !binary.trim().isEmpty()) {
+                if (all.length()>0) all.append("\n--- YUKSEK_KONTRAST ---\n"); all.append(binary.trim());
+            }
+            if (focus != null && !focus.trim().isEmpty()) {
+                if (all.length()>0) all.append("\n--- ODOMETRE_BOLGESI ---\n"); all.append(focus.trim());
+            }
+            String combined = all.toString().trim();
+            if (combined.isEmpty()) { callback.onError(new IOException("Belgede okunabilir metin bulunamadı")); return; }
+            RecordParser.Parsed parsed = RecordParser.fromText(combined);
+            Bitmap visual = null;
+            try {
+                try (InputStream in = context.getContentResolver().openInputStream(imageUri)) { visual = BitmapFactory.decodeStream(in); }
+                if (visual != null && visual.getWidth() > 1800) {
+                    int hh=Math.max(1,Math.round(visual.getHeight()*(1800f/visual.getWidth())));
+                    Bitmap scaled=Bitmap.createScaledBitmap(visual,1800,hh,true); visual.recycle(); visual=scaled;
+                }
+                VisualDocumentAnalyzer.applyImage(visual, combined, parsed);
+            } catch (Exception ignored) {
+                VisualDocumentAnalyzer.sanitizeTextOcr(combined, parsed);
+            } finally {
+                if (visual != null && !visual.isRecycled()) visual.recycle();
+            }
+            callback.onResult(parsed);
         } finally {
             recognizer.close();
         }
@@ -178,7 +277,11 @@ public final class ReceiptOcr {
             try {
                 String text = state.all.toString().trim();
                 if (text.isEmpty()) state.callback.onError(new IOException("PDF'de okunabilir metin bulunamadı"));
-                else state.callback.onResult(RecordParser.fromText(text));
+                else {
+                    RecordParser.Parsed parsed = RecordParser.fromText(text);
+                    VisualDocumentAnalyzer.sanitizeTextOcr(text, parsed);
+                    state.callback.onResult(parsed);
+                }
             } finally {
                 closeQuietly(state.renderer, state.pfd, state.recognizer);
             }

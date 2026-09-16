@@ -277,14 +277,17 @@ public final class RecordParser {
             String v = line.trim();
             if (v.length() < 3 || v.length() > 48) continue;
             String n = normalize(v);
+            // Bilinmeyen firmalarda yalnız şirket/istasyon çağrışımı açıkça varsa kabul et.
+            if (!containsAny(n, "petrol", "akaryakit", "istasyon", "enerji", "sigorta", "servis", "ekspertiz", "otomotiv")) continue;
             if (containsAny(n, "fis", "fatura", "tarih", "saat", "toplam", "kdv", "vergi", "tutar", "pos", "terminal", "plaka", "sase", "vin", "musteri", "telefon", "tel:")) continue;
-            int letters = 0, digits = 0;
+            int letters = 0, digits = 0, bad = 0;
             for (int i = 0; i < v.length(); i++) {
                 char c = v.charAt(i);
                 if (Character.isLetter(c)) letters++;
                 else if (Character.isDigit(c)) digits++;
+                else if (!Character.isWhitespace(c) && "&.-/'".indexOf(c) < 0) bad++;
             }
-            if (letters >= 4 && letters >= digits * 3) return tidyVendor(v);
+            if (letters >= 5 && letters >= digits * 3 && bad <= 1) return tidyVendor(v);
         }
         return "";
     }

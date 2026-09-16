@@ -99,10 +99,37 @@ public final class SmartDocumentAnalyzer {
         if (p.unitPrice <= 0 && labelledU > 0) p.unitPrice = labelledU;
         double total = labelledMoney(raw, new String[]{"genel toplam", "odenecek", "toplam tutar", "toplam", "k.karti", "kredi karti", "nakit"});
         if (total > 0) p.amount = total;
+        recoverFuelColumns(raw, p);
         if (p.amount <= 0 && p.quantity > 0 && p.unitPrice > 0) p.amount = round2(p.quantity * p.unitPrice);
         String date = labelledDate(raw, new String[]{"islem tarihi", "tarih"});
         if (!date.isEmpty()) p.date = date;
         p.detailSummary = compactFuelSummary(p);
+    }
+
+    private static void recoverFuelColumns(String raw, RecordParser.Parsed p) {
+        String[] lines = raw.split("\\r?\\n");
+        Pattern num = Pattern.compile("(?<!\\d)([0-9]{1,5}(?:[.,][0-9]{1,3})?)(?!\\d)");
+        for (String line : lines) {
+            String n = normalize(line);
+            if (!(containsAny(n, "lt", "litre", "motorin", "benzin", "dizel", "lpg", "kursunsuz") || line.contains("×") || line.contains("*"))) continue;
+            ArrayList<Double> vals = new ArrayList<>();
+            Matcher m = num.matcher(line);
+            while (m.find()) { double v = dec(m.group(1)); if (v > 0) vals.add(v); }
+            if (vals.size() >= 3) {
+                for (int i=0;i<vals.size();i++) for (int j=0;j<vals.size();j++) for (int k=0;k<vals.size();k++) {
+                    if (i==j || i==k || j==k) continue;
+                    double q=vals.get(i), u=vals.get(j), total=vals.get(k);
+                    if (q<=0 || q>300 || u<5 || u>5000 || total<20 || total>100000) continue;
+                    double calc=q*u;
+                    if (Math.abs(calc-total) <= Math.max(3.0, total*0.08)) {
+                        if (p.quantity<=0) p.quantity=q;
+                        if (p.unitPrice<=0) p.unitPrice=u;
+                        if (p.amount<=0) p.amount=total;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     private static void enrichInsurance(String raw, String n, RecordParser.Parsed p) {
