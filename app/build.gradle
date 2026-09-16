@@ -33,4 +33,4 @@ dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1'
 }
 
-// v0.14 visual OCR build trigger
+// v0.14 visual OCR hotfix verified build trigger
