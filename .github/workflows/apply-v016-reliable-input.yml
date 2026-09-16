@@ -1,0 +1,41 @@
+name: Apply v0.16 Reliable Input
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "scripts/upgrade_v016_reliable_input.py"
+      - ".github/workflows/apply-v016-reliable-input.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.16 reliability upgrade
+        run: python3 scripts/upgrade_v016_reliable_input.py
+
+      - name: Commit v0.16 changes
+        run: |
+          if git diff --quiet; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle \
+                  app/src/main/java/com/aracdefteri/app/RecordParser.java \
+                  app/src/main/java/com/aracdefteri/app/VisualDocumentAnalyzer.java \
+                  app/src/main/java/com/aracdefteri/app/ImageDocumentAnalyzer.java \
+                  app/src/main/java/com/aracdefteri/app/VoiceCaptureActivity.java \
+                  app/src/main/java/com/aracdefteri/app/NextMainActivity.java
+          git commit -m "Apply v0.16 reliable voice and document input"
+          git push
