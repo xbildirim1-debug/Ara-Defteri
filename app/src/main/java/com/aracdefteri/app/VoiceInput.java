@@ -4,21 +4,17 @@ import android.content.Intent;
 import android.speech.RecognizerIntent;
 
 import java.util.ArrayList;
-import java.util.Locale;
 
-/** Android'in kurulu konuşma tanıma sağlayıcısını kullanır; sonuç otomatik kaydedilmez. */
+/** Uygulama içi sürekli ses oturumunu başlatır; sonuç otomatik kaydedilmez. */
 public final class VoiceInput {
     public static final int REQUEST_CODE = 3112;
+    public static final String ACTION_CAPTURE = "com.aracdefteri.app.action.VOICE_CAPTURE";
 
     private VoiceInput() { }
 
     public static Intent createIntent() {
-        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, new Locale("tr", "TR").toLanguageTag());
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, new Locale("tr", "TR").toLanguageTag());
-        i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
-        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "Kaydı anlat: örn. 500 lira benzin, 125 bin km, Opet'ten");
+        Intent i = new Intent(ACTION_CAPTURE);
+        i.setPackage("com.aracdefteri.app");
         return i;
     }
 
