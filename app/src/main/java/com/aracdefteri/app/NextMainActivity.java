@@ -444,8 +444,11 @@ private void renderPage(int page) {
 
         String detected = parsed.type == null ? "" : normalizeModule(parsed.type.trim());
         if (detected.isEmpty()) {
-            if (assistantStatus != null) assistantStatus.setText("Kayıt türü belirlenemedi. Daha net söyle veya farklı bir fotoğraf dene.");
-            toast("Kayıt türü belirlenemedi");
+            String reason = (parsed.warnings != null && !parsed.warnings.isEmpty())
+                    ? parsed.warnings.get(0)
+                    : "Kayıt türü belirlenemedi. Daha net söyle veya farklı bir fotoğraf dene.";
+            if (assistantStatus != null) assistantStatus.setText(reason);
+            toast(reason);
             return;
         }
         if ("Giderler".equals(detected)) {

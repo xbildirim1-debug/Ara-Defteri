@@ -183,24 +183,32 @@ public final class RecordParser {
 
     private static int extractKm(String raw, String lower) {
         String n = lower;
+
+        Matcher mixedPrefix = Pattern.compile("(?:kilometre(?:m)?|odometre|odo|\\bkm\\b)\\s*(?:de|da)?\\s*[:=-]?\\s*(\\d{1,3})\\s*bin(?:\\s*(\\d{1,3}))?").matcher(n);
+        if (mixedPrefix.find()) {
+            long value = safeLong(mixedPrefix.group(1)) * 1000L + (mixedPrefix.group(2) == null ? 0 : safeLong(mixedPrefix.group(2)));
+            if (value > 0 && value < 2_000_000) return (int) value;
+        }
+        Matcher mixedSuffix = Pattern.compile("(\\d{1,3})\\s*bin(?:\\s*(\\d{1,3}))?\\s*(?:km|kilometre)").matcher(n);
+        if (mixedSuffix.find()) {
+            long value = safeLong(mixedSuffix.group(1)) * 1000L + (mixedSuffix.group(2) == null ? 0 : safeLong(mixedSuffix.group(2)));
+            if (value > 0 && value < 2_000_000) return (int) value;
+        }
+
         Pattern[] patterns = new Pattern[]{
-                Pattern.compile("(?:km|kilometre|odometre|odo)\\s*[:=-]?\\s*([0-9][0-9 .]{2,12})"),
-                Pattern.compile("([0-9][0-9 .]{2,12})\\s*(?:km|kilometre)"),
-                Pattern.compile("([0-9]{1,4})\\s*bin\\s*(?:km|kilometre)")
+                Pattern.compile("(?:kilometre(?:m)?|odometre|odo|toplam\\s*km|\\bkm\\b)\\s*(?:de|da)?\\s*[:=-]?\\s*([0-9][0-9 .]{2,12})"),
+                Pattern.compile("([0-9][0-9 .]{2,12})\\s*(?:km|kilometre)\\b(?!\\s*/\\s*h)")
         };
         for (Pattern pattern : patterns) {
             Matcher m = pattern.matcher(n);
             while (m.find()) {
-                String token = m.group(1);
-                long value;
-                if (m.group().contains("bin") && token.matches("\\d{1,4}")) value = safeLong(token) * 1000L;
-                else value = parseWholeNumber(token);
-                if (value >= 0 && value < 2_000_000) return (int) value;
+                if (m.group().matches("(?is).*km\\s*/\\s*h.*")) continue;
+                long value = parseWholeNumber(m.group(1));
+                if (value > 0 && value < 2_000_000) return (int) value;
             }
         }
 
-        // Türkçe yazıyla söylenen kilometre: "yuz yirmi bes bin kilometre"
-        Matcher words = Pattern.compile("([a-zçğıöşü ]{2,60})\\s+(?:km|kilometre)").matcher(raw.toLowerCase(TR));
+        Matcher words = Pattern.compile("([a-zçğıöşü ]{2,60})\\s+(?:km|kilometre)\\b(?!\\s*/\\s*h)").matcher(raw.toLowerCase(TR));
         while (words.find()) {
             long value = parseTurkishNumber(words.group(1));
             if (value > 0 && value < 2_000_000) return (int) value;

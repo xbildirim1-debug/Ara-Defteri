@@ -139,8 +139,8 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
             recognizerIntent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             recognizerIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
             recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15000L);
-            recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 6500L);
-            recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4500L);
+            recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 8500L);
+            recognizerIntent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 6500L);
 
             statusView.setText("Dinliyorum… Duraksayabilirsin, ben bekliyorum.");
             startListeningNow();
@@ -280,10 +280,15 @@ public class VoiceCaptureActivity extends Activity implements RecognitionListene
             statusView.setText("Mikrofon izni gerekli.");
             return;
         }
+        // Sağlayıcı sessizlikte segmenti hata ile kapatırsa partial sonucu kaybetme.
+        if (!clean(lastPartial).isEmpty()) {
+            commitSegment(lastPartial);
+            lastPartial = "";
+        }
         // NO_MATCH ve SPEECH_TIMEOUT normal duraksama gibi ele alınır.
         // RECOGNIZER_BUSY/CLIENT için biraz daha uzun bekleyip yeniden başlarız.
         long delay = (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT) ? 900L : RESTART_DELAY_MS;
-        statusView.setText("Dinlemeye devam ediyorum…");
+        statusView.setText("Dinlemeye devam ediyorum… Bitir ve kullan diyene kadar kapanmayacağım.");
         scheduleRestart(delay);
     }
 

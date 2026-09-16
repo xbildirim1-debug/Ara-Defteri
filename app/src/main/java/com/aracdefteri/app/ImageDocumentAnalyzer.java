@@ -119,17 +119,17 @@ public final class ImageDocumentAnalyzer {
     private static String analyzeBodyDiagram(Bitmap bitmap) {
         List<String> findings = new ArrayList<>();
         Zone[] zones = new Zone[]{
-                new Zone("Sol ön çamurluk", 0.18f, 0.34f, 0.23f, 0.42f),
-                new Zone("Kaput", 0.36f, 0.63f, 0.22f, 0.41f),
-                new Zone("Sağ ön çamurluk", 0.66f, 0.82f, 0.23f, 0.42f),
-                new Zone("Sol ön kapı", 0.19f, 0.40f, 0.39f, 0.56f),
-                new Zone("Sağ ön kapı", 0.60f, 0.82f, 0.39f, 0.56f),
-                new Zone("Sol arka kapı", 0.19f, 0.40f, 0.54f, 0.70f),
-                new Zone("Sağ arka kapı", 0.60f, 0.82f, 0.54f, 0.70f),
-                new Zone("Sol arka çamurluk", 0.18f, 0.35f, 0.63f, 0.84f),
-                new Zone("Sağ arka çamurluk", 0.65f, 0.82f, 0.63f, 0.84f),
-                new Zone("Tavan", 0.38f, 0.62f, 0.40f, 0.67f),
-                new Zone("Bagaj / arka kapak", 0.36f, 0.63f, 0.67f, 0.84f)
+                new Zone("Sol ön çamurluk", 0.18f, 0.31f, 0.23f, 0.41f),
+                new Zone("Kaput", 0.38f, 0.62f, 0.22f, 0.40f),
+                new Zone("Sağ ön çamurluk", 0.69f, 0.82f, 0.23f, 0.41f),
+                new Zone("Sol ön kapı", 0.21f, 0.36f, 0.40f, 0.55f),
+                new Zone("Sağ ön kapı", 0.64f, 0.79f, 0.40f, 0.55f),
+                new Zone("Sol arka kapı", 0.21f, 0.36f, 0.55f, 0.69f),
+                new Zone("Sağ arka kapı", 0.64f, 0.79f, 0.55f, 0.69f),
+                new Zone("Sol arka çamurluk", 0.18f, 0.33f, 0.68f, 0.84f),
+                new Zone("Sağ arka çamurluk", 0.67f, 0.82f, 0.68f, 0.84f),
+                new Zone("Tavan", 0.40f, 0.60f, 0.42f, 0.65f),
+                new Zone("Bagaj / arka kapak", 0.39f, 0.61f, 0.69f, 0.82f)
         };
         for (Zone zone : zones) {
             String state = classifyRegion(bitmap, zone);
@@ -145,7 +145,7 @@ public final class ImageDocumentAnalyzer {
         int y0 = clamp(Math.round(z.y0 * h), 0, h - 1);
         int y1 = clamp(Math.round(z.y1 * h), y0 + 1, h);
         int step = Math.max(2, Math.min(w, h) / 420);
-        int total = 0, red = 0, yellow = 0, blue = 0, gray = 0;
+        int total = 0, red = 0, yellow = 0, blue = 0, gray = 0, white = 0;
         float[] hsv = new float[3];
         for (int y = y0; y < y1; y += step) {
             for (int x = x0; x < x1; x += step) {
@@ -157,6 +157,7 @@ public final class ImageDocumentAnalyzer {
                 else if (sat > 0.42f && val > 0.55f && hue >= 38f && hue <= 78f) yellow++;
                 else if (sat > 0.28f && val > 0.38f && hue >= 205f && hue <= 300f) blue++;
                 else if (sat < 0.12f && val > 0.28f && val < 0.82f) gray++;
+                else if (sat < 0.15f && val >= 0.82f) white++;
             }
         }
         if (total <= 0) return "";
@@ -164,15 +165,17 @@ public final class ImageDocumentAnalyzer {
         double yr = yellow / (double) total;
         double br = blue / (double) total;
         double gr = gray / (double) total;
+        double wr = white / (double) total;
 
         double best = Math.max(rr, Math.max(yr, br));
-        if (best >= 0.075) {
+        if (best >= 0.09) {
             if (best == rr) return "Değişen";
             if (best == yr) return "Lokal boyalı";
             return "Boyalı";
         }
         // Gri/Sök-Tak rengi beyaz zemin ve gölgelerle karışabildiği için daha yüksek eşik gerekir.
-        if (gr >= 0.34) return "Sök-tak";
+        if (gr >= 0.40) return "Sök-tak";
+        if (wr >= 0.55 && best < 0.08 && gr < 0.28) return "Orijinal";
         return "";
     }
 
