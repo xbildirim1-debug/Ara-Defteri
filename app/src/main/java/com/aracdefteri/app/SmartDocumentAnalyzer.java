@@ -35,6 +35,14 @@ public final class SmartDocumentAnalyzer {
         int betterKm = extractBestKm(text);
         if (betterKm > 0) p.km = betterKm;
 
+        // Fişlerde kilometre de bulunabilir. Litre/tutar/birim fiyat gibi güçlü yakıt
+        // işaretleri varsa ODO sonucu yakıt kaydını ezmemeli.
+        if ((kind == null || kind.isEmpty() || "ODOMETER".equals(kind)) && hasFuelEvidence(text, n, p)) {
+            kind = "FUEL";
+            p.documentKind = "FUEL";
+            p.confidence = Math.max(p.confidence, 82);
+        }
+
         if ("FUEL".equals(kind)) enrichFuel(text, n, p);
         else if ("INSURANCE".equals(kind)) enrichInsurance(text, n, p);
         else if ("INSPECTION".equals(kind)) enrichInspection(text, n, p);
@@ -53,6 +61,18 @@ public final class SmartDocumentAnalyzer {
         else if ("TAX".equals(kind)) p.type = "Vergi";
         else if ("MAINTENANCE".equals(kind) && (p.type == null || p.type.isEmpty())) p.type = "Bakım";
         else if ("DAMAGE".equals(kind) && (p.type == null || p.type.isEmpty())) p.type = "Hasar";
+    }
+
+    private static boolean hasFuelEvidence(String raw, String n, RecordParser.Parsed p) {
+        int score = 0;
+        if (p.quantity > 0 && p.quantity < 1000) score += 5;
+        if (p.unitPrice > 0 && p.unitPrice < 100000) score += 4;
+        if (p.amount > 0 && p.amount < 10_000_000) score += 2;
+        if (p.fuelType != null && !p.fuelType.isEmpty()) score += 3;
+        if (!knownVendor(n).isEmpty()) score += 2;
+        if (containsAny(n, "akaryakit", "motorin", "dizel", "benzin", "kursunsuz", "otogaz", "lpg", "pompa", "tabanca", "litre", "tl/lt", "tl/l")) score += 3;
+        if (Pattern.compile("(?i)[0-9]{1,4}(?:[.,][0-9]{1,3})?\\s*(?:lt|l|litre)\\s*[x×*]\\s*[0-9]{1,5}(?:[.,][0-9]{1,3})?").matcher(raw).find()) score += 6;
+        return score >= 6;
     }
 
     private static void enrichFuel(String raw, String n, RecordParser.Parsed p) {

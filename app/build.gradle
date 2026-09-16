@@ -10,8 +10,8 @@ android {
         applicationId 'com.aracdefteri.app'
         minSdk 26
         targetSdk 35
-        versionCode 15
-        versionName '0.12.0-assistant-dev'
+        versionCode 16
+        versionName '0.13.0-fuel-receipt-dev'
     }
 
     buildTypes {

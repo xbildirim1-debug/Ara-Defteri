@@ -409,8 +409,17 @@ private void renderPage(int page) {
             return;
         }
 
-        boolean odometerOnly = "ODOMETER".equals(parsed.documentKind) ||
-                ((parsed.type == null || parsed.type.trim().isEmpty()) && parsed.km > 0);
+        boolean fuelLike = "FUEL".equals(parsed.documentKind)
+                || (parsed.quantity > 0 && (parsed.amount > 0 || parsed.unitPrice > 0))
+                || ((parsed.fuelType != null && !parsed.fuelType.trim().isEmpty())
+                    && (parsed.quantity > 0 || parsed.amount > 0 || parsed.unitPrice > 0));
+        if (fuelLike) {
+            parsed.type = "Yakıt";
+            parsed.documentKind = "FUEL";
+        }
+
+        boolean odometerOnly = !fuelLike && ("ODOMETER".equals(parsed.documentKind) ||
+                ((parsed.type == null || parsed.type.trim().isEmpty()) && parsed.km > 0));
         if (odometerOnly) {
             if (parsed.km <= 0) {
                 if (assistantStatus != null) assistantStatus.setText("Kilometre değeri güvenle okunamadı. Manuel giriş yapabilirsin.");
