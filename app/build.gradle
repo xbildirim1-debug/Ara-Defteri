@@ -10,8 +10,8 @@ android {
         applicationId 'com.aracdefteri.app'
         minSdk 26
         targetSdk 35
-        versionCode 18
-        versionName '0.14-visual-ocr'
+        versionCode 19
+        versionName '0.15-continuous-voice'
     }
 
     buildTypes {
@@ -33,4 +33,4 @@ dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1'
 }
 
-// v0.14 visual OCR hotfix verified build trigger
+// v0.15 continuous voice input build trigger
