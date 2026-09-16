@@ -14,5 +14,14 @@ Taşıtının dijital hafızası için geliştirilen Android uygulaması. Repo a
 - 7 gün ve 1 gün kala bildirimler
 - Kompakt, numaralı Araç CV PDF üretimi
 - Cihaz içi SQLite veri saklama
+- **Akıllı Veri Girişi:** kayıt formlarında Türkçe sesli giriş ve kamera/galeriden OCR ile alan doldurma
+- Ses veya fotoğraftan tarih, kilometre, tutar, litre/kWh, birim fiyat, yakıt türü, firma/istasyon ve bakım parçalarını algılama
+- Algılanan bilgiler kullanıcı onayı olmadan kaydedilmez; okunamayan alanlar manuel tamamlanabilir
+
+### Akıllı giriş örnekleri
+- “Kilometre 235 bin 487.”
+- “10 litre yakıt aldım, 873 lira ödedim.”
+- “Bugün yağ ve filtre bakımı yaptırdım, 4.750 lira, kilometre 236 bin 120.”
+- Gösterge paneli fotoğrafından kilometre, yakıt fişinden litre/tutar/tarih ve servis belgesinden bakım bilgileri okunabilir.
 
 Bu depo kişisel veri içermez. İlk kurulumdaki örnek araç ve geçmiş kayıtları yalnızca demo verisidir.
