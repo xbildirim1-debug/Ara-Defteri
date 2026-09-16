@@ -31,7 +31,7 @@ public final class ObdBluetooth {
     }
     supported.clear();
     for(int base=0;base<=0xA0;base+=32){String raw=command(String.format(Locale.US,"01%02X",base),id);Set<Integer> page=ObdProtocol.supported(raw,base);
-     if(base==0&&ObdProtocol.payloads(raw,0x41).isEmpty())throw new IOException("ECU yanıt vermedi. Kontağı ve adaptör uyumluluğunu kontrol et.");
+     if(base==0&&!ObdProtocol.validSupportResponse(raw,base))throw new IOException("ECU yanıt vermedi. Kontağı ve adaptör uyumluluğunu kontrol et.");
      supported.addAll(page);if(!page.contains(base+32))break;
     }
     if(id!=generation)return;ready=true;busy=false;status(id,"Bağlandı. "+supported.size()+" standart veri desteği bildirildi.");refresh();
@@ -46,7 +46,7 @@ public final class ObdBluetooth {
     int[] services={3,7,10};String[] labels={"Kayıtlı","Bekleyen","Kalıcı"};
     for(int i=0;i<services.length;i++){
      String raw=command(String.format(Locale.US,"%02X",services[i]),id);List<byte[]> data=ObdProtocol.payloads(raw,services[i]+64);
-     if(data.isEmpty()){codes.put(labels[i]+" taraması", "Yanıt alınamadı / desteklenmiyor");continue;}
+     if(!ObdProtocol.validDtcResponse(raw,services[i]+64)){codes.put(labels[i]+" taraması", "Yanıt alınamadı / desteklenmiyor");continue;}
      Set<String> dtcs=ObdProtocol.dtcs(raw,services[i]+64);
      if(dtcs.isEmpty())codes.put(labels[i]+" taraması","Kod bildirilmedi. Bu sonuç tüm kontrol ünitelerini kapsamaz.");
      for(String code:dtcs)codes.put(code+" · "+labels[i],ObdProtocol.describe(code));

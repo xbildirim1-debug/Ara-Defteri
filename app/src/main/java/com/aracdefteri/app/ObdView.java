@@ -23,7 +23,7 @@ public final class ObdView extends LinearLayout implements ObdBluetooth.Listener
   button("Bluetooth cihazı seç ve bağlan",this::chooseDevice);
   button("Bluetooth ayarları / eşleştirme",()->activity.startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)));
   button("Ölçümleri ve arıza kodlarını yenile",()->{odometer=null;update.setEnabled(false);connection.refresh();});
-  button("Bağlantıyı kes",()->{connection.disconnect();invalidate();status.setText("Bağlantı kesildi.");});
+  button("Bağlantıyı kes",()->{connection.disconnect();clearMeasurements();status.setText("Bağlantı kesildi.");});
   stamp=label("Henüz ölçüm alınmadı",12,false);
   label("Araç bilgilerini güncelle",19,true);
   label("Yalnız ECU toplam kilometre verisi aktarılır. Hız, yolculuk ve arıza sonrası mesafe toplam km değildir. Canlı sensörler kayıtlı araç bilgilerini değiştirmez.",12,false);
@@ -51,11 +51,11 @@ public final class ObdView extends LinearLayout implements ObdBluetooth.Listener
    if(adapter==null){status.setText("Bu cihazda Bluetooth bulunamadı.");return;}if(!adapter.isEnabled()){status.setText("Bluetooth'u telefon ayarlarından aç.");return;}
    ArrayList<BluetoothDevice> devices=new ArrayList<>(adapter.getBondedDevices());if(devices.isEmpty()){status.setText("Önce telefonun Bluetooth ayarlarında OBD adaptörünü eşleştir.");return;}
    String[] names=new String[devices.size()];for(int i=0;i<names.length;i++)names[i]=(devices.get(i).getName()==null?"Bluetooth cihazı":devices.get(i).getName())+"\n"+devices.get(i).getAddress();
-   new AlertDialog.Builder(activity).setTitle("OBD adaptörünü seç").setItems(names,(d,index)->{invalidate();connection.connect(devices.get(index));}).setNegativeButton("Vazgeç",null).show();
+   new AlertDialog.Builder(activity).setTitle("OBD adaptörünü seç").setItems(names,(d,index)->{clearMeasurements();connection.connect(devices.get(index));}).setNegativeButton("Vazgeç",null).show();
   }catch(SecurityException e){status.setText("Bluetooth bağlantı izni gerekli.");}
  }
- private void invalidate(){timestamp=0;odometer=null;if(update!=null)update.setEnabled(false);if(stamp!=null)stamp.setText("Güncel ölçüm yok");for(ObdProtocol.Metric m:ObdProtocol.METRICS){TextView field=fields.get(m.pid);if(field!=null)field.setText(m.title+": —");}}
- @Override public void status(String s){if(!attached)return;status.setText(s);if(s.startsWith("Okuma kesildi")||s.startsWith("Bağlantı kurulamadı")){invalidate();codes.setText("Tarama tamamlanmadı.");}}
+ private void clearMeasurements(){timestamp=0;odometer=null;if(update!=null)update.setEnabled(false);if(stamp!=null)stamp.setText("Güncel ölçüm yok");for(ObdProtocol.Metric m:ObdProtocol.METRICS){TextView field=fields.get(m.pid);if(field!=null)field.setText(m.title+": —");}}
+ @Override public void status(String s){if(!attached)return;status.setText(s);if(s.startsWith("Okuma kesildi")||s.startsWith("Bağlantı kurulamadı")){clearMeasurements();codes.setText("Tarama tamamlanmadı.");}}
  @Override public void snapshot(Map<Integer,Double> values,Set<Integer> supported,Map<String,String> dtcs,long now){
   if(!attached)return;timestamp=now;odometer=values.get(0xA6);update.setEnabled(odometer!=null&&odometer>0&&odometer<2_000_000);
   stamp.setText("Son okuma: "+new SimpleDateFormat("dd.MM.yyyy HH:mm:ss",new Locale("tr","TR")).format(new Date(now)));
@@ -67,12 +67,12 @@ public final class ObdView extends LinearLayout implements ObdBluetooth.Listener
  }
  private void updateKm(){
   if(odometer==null||System.currentTimeMillis()-timestamp>120000){update.setEnabled(false);status.setText("Kilometre için önce güncel ölçüm al.");return;}
-  AppDatabase db=new AppDatabase(activity);AppDatabase.Vehicle vehicle=db.getVehicle();int read=(int)Math.floor(odometer);
+  AppDatabase db=new AppDatabase(activity);AppDatabase.Vehicle vehicle=db.getVehicle();int read=(int)Math.floor(odometer);final long measuredAt=timestamp;
   if(read<vehicle.km){new AlertDialog.Builder(activity).setTitle("Kilometre uyuşmazlığı").setMessage("ECU: "+read+" km\nKayıtlı: "+vehicle.km+" km\nDüşük değer otomatik aktarılmaz. Araç göstergesini ve seçili aracı kontrol et.").setPositiveButton("Tamam",null).show();return;}
   new AlertDialog.Builder(activity).setTitle("Seçili aracın kilometresini güncelle?").setMessage(vehicle.brand+" "+vehicle.model+" · "+vehicle.plate+"\nMevcut: "+vehicle.km+" km\nECU toplam kilometre: "+read+" km\nAdaptörün bu araca bağlı olduğunu ve değerin göstergeyle uyumlu olduğunu kontrol et.")
-   .setNegativeButton("Vazgeç",null).setPositiveButton("Onayla ve güncelle",(d,w)->{AppDatabase.Vehicle current=db.getVehicle();if(System.currentTimeMillis()-timestamp>120000||odometer==null||!current.plate.equals(vehicle.plate)||read<current.km){status.setText("Veri veya araç değişti. Yeniden ölçüm al.");return;}db.updateVehicle(current.brand,current.model,current.year,current.plate,read,current.fuelType);status.setText("Araç kilometresi güncellendi: "+read+" km");}).show();
+   .setNegativeButton("Vazgeç",null).setPositiveButton("Onayla ve güncelle",(d,w)->{AppDatabase.Vehicle current=db.getVehicle();if(timestamp!=measuredAt||System.currentTimeMillis()-measuredAt>120000||odometer==null||!current.plate.equals(vehicle.plate)||read<current.km){status.setText("Veri veya araç değişti. Yeniden ölçüm al.");return;}db.updateVehicle(current.brand,current.model,current.year,current.plate,read,current.fuelType);status.setText("Araç kilometresi güncellendi: "+read+" km");}).show();
  }
- public void pauseConnection(){connection.disconnect();invalidate();status.setText("Bağlantı duraklatıldı. Yeniden bağlanabilirsin.");}
+ public void pauseConnection(){connection.disconnect();clearMeasurements();status.setText("Bağlantı duraklatıldı. Yeniden bağlanabilirsin.");}
  public void close(){attached=false;connection.close();}
  @Override protected void onDetachedFromWindow(){close();super.onDetachedFromWindow();}
 }

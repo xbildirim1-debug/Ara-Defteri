@@ -60,6 +60,15 @@ public final class ObdProtocol {
    if(result!=null&&Math.abs(result-v)>.01)return null;result=v;
   }return result;
  }
+ public static boolean validDtcResponse(String raw,int service){
+  List<byte[]> frames=payloads(raw,service);if(frames.isEmpty())return false;
+  for(byte[] p:frames){if(p.length<2)return false;
+   if((p.length-1)%2!=0 && p.length!=2+(p[1]&255)*2)return false;
+  }return true;
+ }
+ public static boolean validSupportResponse(String raw,int base){
+  for(byte[] p:payloads(raw,0x41))if(p.length>=6&&(p[1]&255)==base)return true;return false;
+ }
  public static Set<String> dtcs(String raw,int service){
   Set<String> out=new LinkedHashSet<>();for(byte[] p:payloads(raw,service)){
    int start=1;

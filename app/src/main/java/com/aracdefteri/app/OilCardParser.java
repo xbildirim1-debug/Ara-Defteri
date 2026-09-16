@@ -14,6 +14,8 @@ public final class OilCardParser {
         p.type="Bakım";p.documentKind="MAINTENANCE";p.maintenanceSubtype="Yağ bakımı";p.km=0;p.nextKm=0;p.amount=0;p.maintenanceParts.clear();p.vendor="";
         List<String> summary=new ArrayList<>();int common=0;boolean different=false;
         boolean nextFirst=DocumentLayout.norm(raw).indexOf("degisecegi")<DocumentLayout.norm(raw).indexOf("degistigi");
+        // Printed part labels frequently span two lines inside the same table cell.
+        raw=raw.replaceAll("(?iu)(motor|şan\\.|san\\.|şanzıman|def\\.|diferansiyel|yağ|mazot|yakıt|hava|polen)[ \\t]*\\r?\\n[ \\t]*(yağı|yagi|filtresi)", "$1 $2");
         for(String line:raw.split("\\r?\\n")){
             String n=DocumentLayout.norm(line);
             if(n.contains("yag cinsi")){Matcher oil=Pattern.compile("(?i)\\b(?:0|5|10|15|20)\\s*W\\s*[-/]?\\s*(?:20|30|40|50|60)\\b").matcher(line);if(oil.find())summary.add("Yağ cinsi: "+oil.group());}

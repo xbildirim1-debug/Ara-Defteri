@@ -131,13 +131,21 @@ public final class TurkeyVehicleSpecs {
     }
 
     public static List<Spec> specsFor(String brand, String model, int year) {
+        boolean hybridOnly=norm(brand).equals("toyota")&&norm(model).equals("corolla hybrid")&&year>=2026;
+        if(norm(brand).equals("toyota")&&(norm(model).equals("corolla sedan")||hybridOnly))model="Corolla";
+        List<Spec> current=TurkeyVehicleSpecs2026.get(brand,model,year);
+        if(current!=null)return current;
         ArrayList<Spec> out = new ArrayList<>();
         List<Spec> list = DATA.get(key(brand, model));
         if (list != null) {
             for (Spec s : list) if (year >= s.fromYear && year <= s.toYear) out.add(s);
         }
         out.addAll(TurkeyVehicleSpecsExtra.specsFor(brand, model, year));
-        if (out.isEmpty() && list != null) out.addAll(list);
+        final boolean filterHybrid=hybridOnly;
+        if(filterHybrid)out.removeIf(s -> !s.fuel.startsWith("Hibrit"));
+        LinkedHashMap<String,Spec> unique=new LinkedHashMap<>();
+        for(Spec s:out)unique.put(s.variant,s);
+        out=new ArrayList<>(unique.values());
         return out;
     }
 
@@ -188,3 +196,4 @@ public final class TurkeyVehicleSpecs {
         return new Spec(year, year, "Otomatik temel bilgi", "", "", body, fuel, trans, engine, power, drive);
     }
 }
+

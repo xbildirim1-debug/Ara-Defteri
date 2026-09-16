@@ -75,6 +75,15 @@ public final class ReceiptOcr {
    }
    if(p.km<=0)p.warnings.add("ODO değeri okunamadı. Hız kadranı rakamları kullanılmadı.");
   }
+  if(OilCardParser.isCard(raw)&&p.maintenanceParts.isEmpty()){
+   float left=bitmap.getWidth(),top=bitmap.getHeight(),right=0,bottom=0;
+   for(DocumentLayout.Word word:layout.words){left=Math.min(left,word.left);top=Math.min(top,word.top);right=Math.max(right,word.right);bottom=Math.max(bottom,word.bottom);}
+   int x=Math.max(0,(int)left-25),y=Math.max(0,(int)top-25);
+   int w=Math.min(bitmap.getWidth()-x,(int)(right-left)+50),h=Math.min(bitmap.getHeight()-y,(int)(bottom-top)+50);
+   if(w>0&&h>0&&w<1400){Bitmap crop=Bitmap.createBitmap(bitmap,x,y,w,h);float scale=Math.min(3f,2600f/Math.max(w,h));Bitmap large=Bitmap.createScaledBitmap(crop,Math.round(w*scale),Math.round(h*scale),true);if(large!=crop)crop.recycle();
+    try{String focused=read(large,reader).text();RecordParser.Parsed candidate=RecordParser.fromText(focused);if(OilCardParser.isCard(focused)&&!candidate.maintenanceParts.isEmpty()){p=candidate;}}finally{large.recycle();}
+   }
+  }
   return p;
  }
  private static int isolatedDigits(String raw){String s=raw.trim();if(s.contains("\n"))return 0;return DocumentLayout.wholeKm(s);}

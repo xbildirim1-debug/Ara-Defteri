@@ -21,6 +21,15 @@ public final class ObdProtocolTest {
   check(!ObdProtocol.allowed("04"));check(!ObdProtocol.allowed("ATSH7E0"));check(!ObdProtocol.allowed("2E1234"));
   check(ObdProtocol.describe("P1300").contains("doğrulanamadı"));
   check(ObdProtocol.value("41 A6 00 31 12 BA",metric(0xA6))==321605.8);
+  check(!ObdProtocol.validDtcResponse("43",0x43));
+  check(!ObdProtocol.validDtcResponse("43 02 03 00",0x43));
+  check(ObdProtocol.validDtcResponse("43 00",0x43));
+  check(!ObdProtocol.validSupportResponse("41 0D 00",0));
+  check(TurkeyVehicleSpecs.specsFor("Volkswagen","Golf",2026).size()==7);
+  check(TurkeyVehicleSpecs.specsFor("Hyundai","i20",2026).size()==4);
+  check(TurkeyVehicleSpecs.specsFor("Toyota","Corolla Sedan",2026).size()>=9);
+  check(TurkeyVehicleSpecs.specsFor("Toyota","Corolla Hybrid",2026).stream().allMatch(s->s.fuel.startsWith("Hibrit")));
+  check(TurkeyVehicleSpecs.specsFor("Volkswagen","ID.4",1990).isEmpty());
   System.out.println("PASS "+count+" OBD protocol checks");
  }
 }
