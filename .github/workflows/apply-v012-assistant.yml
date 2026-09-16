@@ -1,0 +1,40 @@
+name: Apply v0.12 Assistant Upgrade
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "scripts/upgrade_v012_assistant.py"
+      - ".github/workflows/apply-v012-assistant.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply v0.12 source upgrade
+        run: python3 scripts/upgrade_v012_assistant.py
+
+      - name: Commit upgraded sources
+        run: |
+          if git diff --quiet; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java \
+                  app/src/main/java/com/aracdefteri/app/AppDatabase.java \
+                  app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java \
+                  app/src/main/java/com/aracdefteri/app/VehicleCvPdf.java \
+                  app/build.gradle
+          git commit -m "Add central assistant and selectable CV sections"
+          git push
