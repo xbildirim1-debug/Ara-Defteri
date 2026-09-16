@@ -1,0 +1,69 @@
+name: Apply v0.15.1 Photo KM Safety
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-v015-km-safety.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply photo KM safety patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/aracdefteri/app/NextMainActivity.java')
+          s = p.read_text(encoding='utf-8')
+          old = '''        boolean fuelLike = "FUEL".equals(parsed.documentKind)
+                || (parsed.quantity > 0 && (parsed.amount > 0 || parsed.unitPrice > 0))
+                || ((parsed.fuelType != null && !parsed.fuelType.trim().isEmpty())
+                    && (parsed.quantity > 0 || parsed.amount > 0 || parsed.unitPrice > 0));
+          if (fuelLike) {
+              parsed.type = "Yakıt";
+              parsed.documentKind = "FUEL";
+          }
+'''
+          new = '''        // Fotoğraf OCR'ında hız göstergesi (örn. 140 km/h) veya başka küçük sayılar
+        // toplam kilometre değildir. Sesli girişte gerçek 140 km söylenebilmesi için bu
+        // güvenlik yalnız fotoğraf kaynağına uygulanır.
+        if ("Fotoğraf".equals(source) && parsed.km > 0 && parsed.km < 1000) {
+            parsed.km = 0;
+        }
+
+        boolean confirmedFuelDocument = "FUEL".equals(parsed.documentKind);
+        boolean fuelLike = confirmedFuelDocument
+                || (parsed.quantity > 0 && (parsed.amount > 0 || parsed.unitPrice > 0))
+                || ((parsed.fuelType != null && !parsed.fuelType.trim().isEmpty())
+                    && (parsed.quantity > 0 || parsed.amount > 0 || parsed.unitPrice > 0));
+        if (fuelLike) {
+            // Bir fotoğraf yakıt fişine miktar/tutar üzerinden benziyorsa ama belge katmanı
+            // henüz FUEL olarak doğrulamamışsa, başka bir fiş numarasını KM sanma.
+            if ("Fotoğraf".equals(source) && !confirmedFuelDocument) parsed.km = 0;
+            parsed.type = "Yakıt";
+            parsed.documentKind = "FUEL";
+        }
+'''
+          if old not in s:
+              raise SystemExit('Target assistant block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          g = Path('app/build.gradle')
+          gs = g.read_text(encoding='utf-8')
+          gs = gs.replace("versionCode 19", "versionCode 20", 1)
+          gs = gs.replace("versionName '0.15-continuous-voice'", "versionName '0.15.1-voice-km-safety'", 1)
+          gs = gs.replace('// v0.15 continuous voice input build trigger', '// v0.15.1 continuous voice + photo KM safety build trigger')
+          g.write_text(gs, encoding='utf-8')
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java app/build.gradle
+          git commit -m "Fix photo speedometer values being treated as KM"
+          git push
