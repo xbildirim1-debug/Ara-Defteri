@@ -1,0 +1,54 @@
+name: Apply v0.13 Fuel Receipt Fix
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-v013-fuel-receipt.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch fuel receipt classification
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java')
+          s = p.read_text(encoding='utf-8')
+          old = '''        int betterKm = extractBestKm(text);\n        if (betterKm > 0) p.km = betterKm;\n\n        if (\"FUEL\".equals(kind)) enrichFuel(text, n, p);'''
+          new = '''        int betterKm = extractBestKm(text);\n        if (betterKm > 0) p.km = betterKm;\n\n        // Fişlerde kilometre de bulunabilir. Litre/tutar/birim fiyat gibi güçlü yakıt\n        // işaretleri varsa ODO sonucu yakıt kaydını ezmemeli.\n        if ((kind == null || kind.isEmpty() || \"ODOMETER\".equals(kind)) && hasFuelEvidence(text, n, p)) {\n            kind = \"FUEL\";\n            p.documentKind = \"FUEL\";\n            p.confidence = Math.max(p.confidence, 82);\n        }\n\n        if (\"FUEL\".equals(kind)) enrichFuel(text, n, p);'''
+          if old not in s:
+              raise SystemExit('SmartDocumentAnalyzer insertion point not found')
+          s = s.replace(old, new, 1)
+
+          marker = '''    private static void enrichFuel(String raw, String n, RecordParser.Parsed p) {'''
+          helper = '''    private static boolean hasFuelEvidence(String raw, String n, RecordParser.Parsed p) {\n        int score = 0;\n        if (p.quantity > 0 && p.quantity < 1000) score += 5;\n        if (p.unitPrice > 0 && p.unitPrice < 100000) score += 4;\n        if (p.amount > 0 && p.amount < 10_000_000) score += 2;\n        if (p.fuelType != null && !p.fuelType.isEmpty()) score += 3;\n        if (!knownVendor(n).isEmpty()) score += 2;\n        if (containsAny(n, \"akaryakit\", \"motorin\", \"dizel\", \"benzin\", \"kursunsuz\", \"otogaz\", \"lpg\", \"pompa\", \"tabanca\", \"litre\", \"tl/lt\", \"tl/l\")) score += 3;\n        if (Pattern.compile(\"(?i)[0-9]{1,4}(?:[.,][0-9]{1,3})?\\\\s*(?:lt|l|litre)\\\\s*[x×*]\\\\s*[0-9]{1,5}(?:[.,][0-9]{1,3})?\").matcher(raw).find()) score += 6;\n        return score >= 6;\n    }\n\n'''
+          if marker not in s:
+              raise SystemExit('enrichFuel marker not found')
+          s = s.replace(marker, helper + marker, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('app/src/main/java/com/aracdefteri/app/NextMainActivity.java')
+          s = p.read_text(encoding='utf-8')
+          old = '''        boolean odometerOnly = \"ODOMETER\".equals(parsed.documentKind) ||\n                ((parsed.type == null || parsed.type.trim().isEmpty()) && parsed.km > 0);\n        if (odometerOnly) {'''
+          new = '''        boolean fuelLike = \"FUEL\".equals(parsed.documentKind)\n                || (parsed.quantity > 0 && (parsed.amount > 0 || parsed.unitPrice > 0))\n                || ((parsed.fuelType != null && !parsed.fuelType.trim().isEmpty())\n                    && (parsed.quantity > 0 || parsed.amount > 0 || parsed.unitPrice > 0));\n        if (fuelLike) {\n            parsed.type = \"Yakıt\";\n            parsed.documentKind = \"FUEL\";\n        }\n\n        boolean odometerOnly = !fuelLike && (\"ODOMETER\".equals(parsed.documentKind) ||\n                ((parsed.type == null || parsed.type.trim().isEmpty()) && parsed.km > 0));\n        if (odometerOnly) {'''
+          if old not in s:
+              raise SystemExit('assistant odometer block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('app/build.gradle')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("versionCode 15", "versionCode 16") if "versionCode 15" in s else s.replace("versionCode 14", "versionCode 16")
+          s = s.replace("versionName '0.12.0-assistant-dev'", "versionName '0.13.0-fuel-receipt-dev'")
+          s = s.replace("versionName '0.11.0-document-intelligence-dev'", "versionName '0.13.0-fuel-receipt-dev'")
+          p.write_text(s, encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java app/src/main/java/com/aracdefteri/app/NextMainActivity.java app/build.gradle
+          git commit -m 'Fix fuel receipts being treated as odometer-only' || exit 0
+          git push
