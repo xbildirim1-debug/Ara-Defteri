@@ -8,13 +8,12 @@ import java.util.ArrayList;
 /** Uygulama içi sürekli ses oturumunu başlatır; sonuç otomatik kaydedilmez. */
 public final class VoiceInput {
     public static final int REQUEST_CODE = 3112;
-    public static final String ACTION_CAPTURE = "com.aracdefteri.app.action.VOICE_CAPTURE";
 
     private VoiceInput() { }
 
     public static Intent createIntent() {
-        Intent i = new Intent(ACTION_CAPTURE);
-        i.setPackage("com.aracdefteri.app");
+        Intent i = new Intent();
+        i.setClassName("com.aracdefteri.app", "com.aracdefteri.app.VoiceCaptureActivity");
         return i;
     }
 
