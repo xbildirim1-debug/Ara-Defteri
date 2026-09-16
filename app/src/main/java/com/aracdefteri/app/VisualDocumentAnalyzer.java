@@ -195,13 +195,14 @@ public final class VisualDocumentAnalyzer {
             if (s >= 0 && s < c.length) c[s]++;
         }
         if (total == 0) return "";
-        int best = 0;
-        for (int i=1;i<c.length;i++) if (c[i] > c[best]) best = i;
-        float ratio = c[best] / (float) total;
-        if (best == 1 && ratio > .10f) return "Değişen";
-        if (best == 2 && ratio > .10f) return "Lokal boyalı";
-        if (best == 3 && ratio > .10f) return "Boyalı";
-        if (best == 4 && ratio > .12f) return "Sök-tak";
+        float red = c[1] / (float) total;
+        float yellow = c[2] / (float) total;
+        float blue = c[3] / (float) total;
+        float gray = c[4] / (float) total;
+        if (red > .10f) return "Değişen";
+        if (yellow > .10f) return "Lokal boyalı";
+        if (blue > .10f) return "Boyalı";
+        if (gray > .35f) return "Sök-tak";
         return "Orijinal";
     }
 

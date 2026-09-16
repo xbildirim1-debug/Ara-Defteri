@@ -112,7 +112,7 @@ public final class ReceiptOcr {
                     });
         } catch (Exception e) {
             recycle(enhanced, scaled, source);
-            finishImageRecognition(recognizer, originalText, "", callback);
+            processFocusedImage(context, imageUri, recognizer, originalText, "", callback);
         }
     }
 
