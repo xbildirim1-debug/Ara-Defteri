@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - "scripts/upgrade_smart_documents.py"
+      - "scripts/fix_policy_number_parser.py"
       - ".github/workflows/apply-smart-document-upgrade.yml"
   workflow_dispatch:
 
@@ -21,7 +22,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply source upgrade
-        run: python3 scripts/upgrade_smart_documents.py
+        run: |
+          python3 scripts/upgrade_smart_documents.py
+          python3 scripts/fix_policy_number_parser.py
 
       - name: Commit upgraded sources
         run: |
@@ -32,6 +35,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/aracdefteri/app/RecordParser.java \
-                  app/src/main/java/com/aracdefteri/app/NextMainActivity.java
-          git commit -m "Wire smart document analyzer into forms"
+                  app/src/main/java/com/aracdefteri/app/NextMainActivity.java \
+                  app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java
+          git commit -m "Harden smart vehicle document parsing"
           git push
