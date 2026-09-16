@@ -32,6 +32,22 @@ public final class RecordParser {
         public double quantity = 0;
         public double unitPrice = 0;
         public int km = 0;
+
+        // Belge türünden bağımsız ortak alanlar.
+        public String documentKind = "";
+        public String plate = "";
+        public String policyNo = "";
+        public String policyStartDate = "";
+        public String policyEndDate = "";
+        public String inspectionResult = "";
+        public String nextDate = "";
+        public String detailSummary = "";
+        public String expertiseSubtype = "";
+        public String taxSubtype = "";
+        public String paymentPeriod = "";
+        public int confidence = 0;
+        public final List<String> warnings = new ArrayList<>();
+
         public final Set<String> maintenanceParts = new LinkedHashSet<>();
     }
 
@@ -53,6 +69,9 @@ public final class RecordParser {
         p.maintenanceSubtype = detectMaintenanceSubtype(lower);
         p.insuranceSubtype = detectInsuranceSubtype(lower);
         detectMaintenanceParts(lower, p.maintenanceParts);
+
+        // Farklı fiş/poliçe/muayene/ekspertiz şablonları için belgeye özel ikinci katman.
+        SmartDocumentAnalyzer.enrich(raw, p);
 
         // Matematiksel tutarlılık: toplam yok ama miktar ve birim fiyat güvenilir görünüyorsa öneri üret.
         if (p.amount <= 0 && p.quantity > 0 && p.unitPrice > 0) {

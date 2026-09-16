@@ -655,6 +655,12 @@ private void renderPage(int page) {
             if (r.cost <= 0) { toast("Toplam ödenen tutarı girmelisin"); return; }
         }
 
+        AppDatabase.Vehicle currentVehicle = db.getVehicle();
+        if (r.km > currentVehicle.km && r.km < 2_000_000) {
+            db.updateVehicle(currentVehicle.brand, currentVehicle.model, currentVehicle.year,
+                    currentVehicle.plate, r.km, currentVehicle.fuelType);
+        }
+
         if (editing) {
             ReminderScheduler.cancel(this, r.id);
             db.updateRecord(r);
@@ -675,7 +681,7 @@ private void renderPage(int page) {
 
         TextView titleView = tv("Akıllı giriş", text, 12, true);
         wrap.addView(titleView);
-        TextView subtitle = tv("Fiş/belge fotoğrafını okut veya kaydı konuş. Bulunan alanlar forma gelir; otomatik kaydedilmez.", muted, 10, false);
+        TextView subtitle = tv("Fiş, poliçe, muayene/ekspertiz fotoğrafı veya PDF okut; ya da kaydı konuş. Bulunan alanlar forma gelir, otomatik kaydedilmez.", muted, 10, false);
         subtitle.setPadding(0, dp(2), 0, dp(8));
         wrap.addView(subtitle);
 
@@ -719,9 +725,10 @@ private void renderPage(int page) {
     private void pickOcrImage() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("image/*");
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "application/pdf"});
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivityForResult(Intent.createChooser(i, "Fiş / belge fotoğrafı seç"), PICK_OCR_IMAGE);
+        startActivityForResult(Intent.createChooser(i, "Fiş / belge fotoğrafı veya PDF seç"), PICK_OCR_IMAGE);
     }
 
     private void captureOcrImage() {
@@ -766,7 +773,7 @@ private void renderPage(int page) {
             return;
         }
         if (pendingSmartForm.smartStatus != null) {
-            pendingSmartForm.smartStatus.setText("Fotoğraf cihaz üzerinde okunuyor…");
+            pendingSmartForm.smartStatus.setText("Belge cihaz üzerinde okunuyor…");
             pendingSmartForm.smartStatus.setTextColor(accent);
         }
         ReceiptOcr.process(this, uri, new ReceiptOcr.Callback() {
@@ -846,6 +853,16 @@ private void renderPage(int page) {
             markSmartField(f.quantity);
             found++;
         }
+        if (p.nextDate != null && !p.nextDate.isEmpty() && f.nextDate != null) {
+            f.nextDate.value.setText(p.nextDate);
+            f.nextDate.value.setTextColor(success);
+            found++;
+        }
+        if (p.policyNo != null && !p.policyNo.isEmpty() && f.extraText != null) {
+            f.extraText.setText(p.policyNo);
+            markSmartField(f.extraText);
+            found++;
+        }
 
         if ("Yakıt".equals(module)) {
             if (p.fuelType != null && !p.fuelType.isEmpty() && f.subtype != null) {
@@ -884,25 +901,70 @@ private void renderPage(int page) {
                 }
                 found++;
             }
+            if (p.detailSummary != null && !p.detailSummary.isEmpty() && f.detail != null) {
+                f.detail.setText(p.detailSummary);
+                markSmartField(f.detail);
+                found++;
+            }
         } else if ("Sigorta/Kasko".equals(module)) {
             if (p.insuranceSubtype != null && !p.insuranceSubtype.isEmpty() && f.subtype != null) {
                 selectSpinnerValue(f.subtype, p.insuranceSubtype);
                 markSmartSpinner(f.subtype);
                 found++;
             }
-            if (p.vendor != null && !p.vendor.isEmpty() && f.detail != null) {
-                f.detail.setText(p.vendor);
+            if (f.detail != null) {
+                String insuranceDetail = (p.detailSummary != null && !p.detailSummary.isEmpty()) ? p.detailSummary : p.vendor;
+                if (insuranceDetail != null && !insuranceDetail.isEmpty()) {
+                    f.detail.setText(insuranceDetail);
+                    markSmartField(f.detail);
+                    found++;
+                }
+            }
+        } else if ("Muayene".equals(module)) {
+            if (p.inspectionResult != null && !p.inspectionResult.isEmpty() && f.subtype != null) {
+                selectSpinnerValue(f.subtype, p.inspectionResult);
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (p.detailSummary != null && !p.detailSummary.isEmpty() && f.detail != null) {
+                f.detail.setText(p.detailSummary);
+                markSmartField(f.detail);
+                found++;
+            }
+        } else if ("Ekspertiz".equals(module)) {
+            if (p.expertiseSubtype != null && !p.expertiseSubtype.isEmpty() && f.subtype != null) {
+                selectSpinnerValue(f.subtype, p.expertiseSubtype);
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (p.detailSummary != null && !p.detailSummary.isEmpty() && f.detail != null) {
+                f.detail.setText(p.detailSummary);
                 markSmartField(f.detail);
                 found++;
             }
         } else if ("Vergi".equals(module)) {
-            if (p.type != null && "Vergi".equals(p.type) && f.subtype != null) {
-                selectSpinnerValue(f.subtype, "MTV");
+            if (f.subtype != null) {
+                String taxType = (p.taxSubtype != null && !p.taxSubtype.isEmpty()) ? p.taxSubtype : "MTV";
+                selectSpinnerValue(f.subtype, taxType);
                 markSmartSpinner(f.subtype);
+                found++;
             }
-        } else if ("Hasar".equals(module) && p.type != null && "Hasar".equals(p.type) && f.subtype != null) {
-            selectSpinnerValue(f.subtype, "Kaza");
-            markSmartSpinner(f.subtype);
+            if (p.detailSummary != null && !p.detailSummary.isEmpty() && f.detail != null) {
+                f.detail.setText(p.detailSummary);
+                markSmartField(f.detail);
+                found++;
+            }
+        } else if ("Hasar".equals(module) && p.type != null && "Hasar".equals(p.type)) {
+            if (f.subtype != null) {
+                selectSpinnerValue(f.subtype, "Kaza");
+                markSmartSpinner(f.subtype);
+                found++;
+            }
+            if (p.detailSummary != null && !p.detailSummary.isEmpty() && f.detail != null) {
+                f.detail.setText(p.detailSummary);
+                markSmartField(f.detail);
+                found++;
+            }
         }
 
         if (p.vendor != null && !p.vendor.isEmpty() && f.title != null &&
@@ -931,6 +993,16 @@ private void renderPage(int page) {
         } else if ("Bakım".equals(module) || "Sigorta/Kasko".equals(module)) {
             items.add("Firma " + ((p.vendor != null && !p.vendor.isEmpty()) ? "✓" : "okunamadı"));
         }
+        if ("Sigorta/Kasko".equals(module)) {
+            items.add("Poliçe no " + ((p.policyNo != null && !p.policyNo.isEmpty()) ? "✓" : "okunamadı"));
+            items.add("Bitiş " + ((p.nextDate != null && !p.nextDate.isEmpty()) ? "✓" : "okunamadı"));
+        } else if ("Muayene".equals(module)) {
+            items.add("Sonuç " + ((p.inspectionResult != null && !p.inspectionResult.isEmpty()) ? "✓" : "okunamadı"));
+            items.add("Geçerlilik " + ((p.nextDate != null && !p.nextDate.isEmpty()) ? "✓" : "okunamadı"));
+        } else if ("Ekspertiz".equals(module)) {
+            items.add("Rapor özeti " + ((p.detailSummary != null && !p.detailSummary.isEmpty()) ? "✓" : "okunamadı"));
+        }
+        if (p.confidence > 0) items.add("Belge güveni %" + p.confidence);
         return source + " sonucu • " + join(items, " • ") + "\nOkunamayan alanları manuel gir; otomatik kayıt yapılmadı.";
     }
 
