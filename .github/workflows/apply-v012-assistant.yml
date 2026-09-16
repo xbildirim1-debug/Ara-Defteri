@@ -1,10 +1,10 @@
-name: Apply v0.13 Fuel Receipt Upgrade
+name: Apply v0.13.1 Enhanced OCR
 
 on:
   push:
     branches: [ "main" ]
     paths:
-      - "scripts/upgrade_v013_fuel_receipt.py"
+      - "scripts/upgrade_v0131_ocr.py"
       - ".github/workflows/apply-v012-assistant.yml"
   workflow_dispatch:
 
@@ -20,8 +20,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply v0.13 fuel receipt upgrade
-        run: python3 scripts/upgrade_v013_fuel_receipt.py
+      - name: Apply enhanced OCR upgrade
+        run: python3 scripts/upgrade_v0131_ocr.py
 
       - name: Commit upgraded sources
         run: |
@@ -31,8 +31,8 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/java/com/aracdefteri/app/NextMainActivity.java \
+          git add app/src/main/java/com/aracdefteri/app/ReceiptOcr.java \
                   app/src/main/java/com/aracdefteri/app/SmartDocumentAnalyzer.java \
                   app/build.gradle
-          git commit -m "Fix fuel receipts being treated as odometer-only"
+          git commit -m "Improve receipt OCR and fuel field extraction"
           git push
